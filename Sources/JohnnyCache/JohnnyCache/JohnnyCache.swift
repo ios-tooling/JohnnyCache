@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import OSLog
 
 @MainActor public class JohnnyCache<Key: CacheableKey, Element: CacheableElement> {
 	var cache: [Key: CachedItem] = [:]
@@ -13,11 +14,21 @@ import Foundation
 	var fetchElement: FetchElement?
 	var inMemoryCost: UInt64 = 0
 	var onDiskCost: UInt64 = 0
-	
+
+	private let logger = Logger(subsystem: "com.standalone.JohnnyCache", category: "cache")
+
 	public typealias FetchElement = (Key) async throws -> Element?
+	public typealias ErrorHandler = @MainActor (Error, String) -> Void
+
+	/// Optional custom error handler. If not set, errors are logged using OSLog.
+	public var errorHandler: ErrorHandler?
 	
-	func report(error: any Error, context: String) {
-		print("\(context) \(error.localizedDescription)")
+	func report(error: Error, context: String) {
+		if let errorHandler {
+			errorHandler(error, context)
+		} else {
+			logger.error("\(context): \(error.localizedDescription)")
+		}
 	}
 	
 	public init(configuration config: Configuration = .init(), fetch: FetchElement? = nil) {
