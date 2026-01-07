@@ -129,6 +129,6 @@ import Foundation
 	func onDiskURL(for key: Key) -> URL? {
 		guard let location = configuration.location else { return nil }
 		
-		return location.appendingPathComponent(key.stringRepresentation, conformingTo: Element.uttype)
+		return location.appendingPathComponent(key.stringRepresentation.replacingOccurrences(of: "/", with: "-"), conformingTo: Element.uttype)
 	}
 }
