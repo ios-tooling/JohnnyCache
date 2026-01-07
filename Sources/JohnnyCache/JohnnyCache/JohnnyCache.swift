@@ -15,6 +15,9 @@ import OSLog
 	var inMemoryCost: UInt64 = 0
 	var onDiskCost: UInt64 = 0
 
+	// Tracks in-flight fetch operations to prevent duplicate requests for the same key
+	internal var inFlightFetches: [Key: Task<Element?, Never>] = [:]
+
 	private let logger = Logger(subsystem: "com.standalone.JohnnyCache", category: "cache")
 
 	public typealias FetchElement = (Key) async throws -> Element?
@@ -61,7 +64,17 @@ import OSLog
 	public subscript(async key: Key) -> Element? {
 		get async {
 			if let cached = self[key] { return cached }
-			if let fetchElement {
+
+			// Check if there's already a fetch in progress for this key
+			if let existingTask = inFlightFetches[key] {
+				return await existingTask.value
+			}
+
+			// No fetch element configured
+			guard let fetchElement else { return nil }
+
+			// Create and track new fetch task
+			let task = Task { @MainActor in
 				do {
 					let newValue = try await fetchElement(key)
 					storeInMemory(newValue, forKey: key)
@@ -69,85 +82,21 @@ import OSLog
 					return newValue
 				} catch {
 					report(error: error, context: "Failed to fetch item for key \(key)")
+					return nil
 				}
 			}
-			return nil
+
+			inFlightFetches[key] = task
+			let result = await task.value
+			inFlightFetches.removeValue(forKey: key)
+
+			return result
 		}
 	}
 	
 	public func clearAll(inMemory: Bool = true, onDisk: Bool = true) {
 		if inMemory { clearInMemory() }
 		if onDisk { clearOnDisk() }
-	}
-	
-	func clearInMemory() {
-		cache = [:]
-		inMemoryCost = 0
-	}
-		
-	func clearOnDisk() {
-		guard let location = configuration.location else { return }
-		try? FileManager.default.removeItem(at: location)
-		try? FileManager.default.createDirectory(at: location, withIntermediateDirectories: true)
-		onDiskCost = 0
-	}
-	
-	func inMemoryElement(for key: Key) -> Element? {
-		guard var item = cache[key] else { return nil }
-		
-		item.accessedAt = .now
-		cache[key] = item
-		return item.element
-	}
-	
-	func onDiskElement(for key: Key) -> Element? {
-		guard let url = onDiskURL(for: key) else { return nil }
-		guard let data = try? Data(contentsOf: url) else { return nil }
-		
-		do {
-			let element = try Element.from(data: data)
-			url.setModificationDate()
-			storeInMemory(element, forKey: key)
-			return element
-		} catch {
-			report(error: error, context: "Failed to extract element for \(key) from \(url)")
-			return nil
-		}
-	}
-	
-	func storeInMemory(_ element: Element?, forKey key: Key) {
-		if let element {
-			inMemoryCost -= cache[key]?.cacheCost ?? 0
-			cache[key] = .init(key: key, element: element, cacheCost: element.cacheCost)
-			inMemoryCost += element.cacheCost
-			checkInMemorySize()
-		} else {
-			guard let existing = cache[key] else { return }
-			inMemoryCost -= existing.element.cacheCost
-			cache.removeValue(forKey: key)
-		}
-	}
-	
-	func storeOnDisk(_ element: Element?, forKey key: Key) {
-		guard let url = onDiskURL(for: key) else { return }
-		
-		if let element {
-			do {
-				if FileManager.default.fileExists(atPath: url.path) {
-					onDiskCost -= url.fileSize
-					try? FileManager.default.removeItem(at: url)
-				}
-				let data = try element.toData()
-				try data.write(to: url)
-				onDiskCost += UInt64(data.count)
-				checkOnDiskSize()
-			} catch {
-				report(error: error, context: "Failed to extract data for \(key)")
-			}
-		} else {
-			onDiskCost -= url.fileSize
-			try? FileManager.default.removeItem(at: url)
-		}
 	}
 	
 	func onDiskURL(for key: Key) -> URL? {
