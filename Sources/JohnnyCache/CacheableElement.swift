@@ -11,6 +11,7 @@ import UniformTypeIdentifiers
 public protocol CacheableElement: Sendable {
 	func toData() throws -> Data
 	static func from(data: Data) throws -> Self
+	var cacheCost: UInt64 { get }
 	
 	static var uttype: UTType { get }
 }
