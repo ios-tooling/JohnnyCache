@@ -2,7 +2,12 @@
   "permissions": {
     "allow": [
       "Bash(afplay:*)",
-      "Bash(swift build:*)"
+      "Bash(swift build:*)",
+      "Bash(swift test:*)",
+      "Bash(xcodebuild test:*)",
+      "Bash(swift package:*)",
+      "Bash(open:*)",
+      "Bash(swift:*)"
     ]
   }
 }

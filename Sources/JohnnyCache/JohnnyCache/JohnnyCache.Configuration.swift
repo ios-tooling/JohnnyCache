@@ -14,7 +14,7 @@ extension JohnnyCache {
 		var onDiskLimit: UInt64
 
 		public init(
-			location: URL = URL.cachesDirectory.appendingPathComponent(String(describing: Element.self)),
+			location: URL? = URL.cachesDirectory.appendingPathComponent(String(describing: Element.self)),
 				inMemory: UInt64 = 1024 * 1024 * 100, 	// 100 MB in memory limit
 				onDisk: UInt64 = 1024 * 1024 * 1024, 	// 1 GB on disk limit
 		) {
