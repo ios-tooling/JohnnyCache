@@ -11,7 +11,7 @@ extension JohnnyCache {
 	public struct Configuration {
 		var location: URL?
 		var inMemoryLimit: UInt64
-		var onDiskLimit: UInt64 = 1024 * 1024 * 100 	// 100 MB in memory limit
+		var onDiskLimit: UInt64
 
 		public init(
 			location: URL = URL.cachesDirectory.appendingPathComponent(String(describing: Element.self)),

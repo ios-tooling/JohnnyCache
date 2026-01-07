@@ -17,7 +17,7 @@ extension JohnnyCache {
 	}
 	
 	func purgeInMemory(downTo limit: UInt64) {
-		let all = cache.values.sorted { $0.storedAt < $1.storedAt }
+		let all = cache.values.sorted { $0.accessedAt < $1.accessedAt }
 		var index = 0
 		while inMemoryCost > limit, index < all.count {
 			storeInMemory(nil, forKey: all[index].key)

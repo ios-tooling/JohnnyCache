@@ -81,13 +81,21 @@ import Foundation
 		onDiskCost = 0
 	}
 	
-	func inMemoryElement(for key: Key) -> Element? { cache[key]?.element }
+	func inMemoryElement(for key: Key) -> Element? {
+		guard var item = cache[key] else { return nil }
+		
+		item.accessedAt = .now
+		cache[key] = item
+		return item.element
+	}
+	
 	func onDiskElement(for key: Key) -> Element? {
 		guard let url = onDiskURL(for: key) else { return nil }
 		guard let data = try? Data(contentsOf: url) else { return nil }
 		
 		do {
 			let element = try Element.from(data: data)
+			url.setModificationDate()
 			storeInMemory(element, forKey: key)
 			return element
 		} catch {
@@ -113,6 +121,10 @@ import Foundation
 		
 		if let element {
 			do {
+				if FileManager.default.fileExists(atPath: url.path) {
+					onDiskCost -= url.fileSize
+					try? FileManager.default.removeItem(at: url)
+				}
 				let data = try element.toData()
 				try data.write(to: url)
 				onDiskCost += UInt64(data.count)
@@ -121,14 +133,15 @@ import Foundation
 				report(error: error, context: "Failed to extract data for \(key)")
 			}
 		} else {
-			onDiskCost += url.fileSize
+			onDiskCost -= url.fileSize
 			try? FileManager.default.removeItem(at: url)
 		}
 	}
 	
 	func onDiskURL(for key: Key) -> URL? {
 		guard let location = configuration.location else { return nil }
+		let path = key.stringRepresentation.replacingOccurrences(of: "/", with: "-").replacingOccurrences(of: ":", with: ";")
 		
-		return location.appendingPathComponent(key.stringRepresentation.replacingOccurrences(of: "/", with: "-"), conformingTo: Element.uttype)
+		return location.appendingPathComponent(path, conformingTo: Element.uttype)
 	}
 }

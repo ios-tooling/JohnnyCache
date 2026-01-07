@@ -16,5 +16,5 @@ extension String: CacheableKey {
 }
 
 extension URL: CacheableKey {
-	public var stringRepresentation: String { (host() ?? "") + "/" + path }
+	public var stringRepresentation: String { (host() ?? "localdevice") + "/" + path }
 }

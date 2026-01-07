@@ -11,6 +11,6 @@ extension JohnnyCache {
 	struct CachedItem: Sendable {
 		let key: Key
 		let element: Element
-		let storedAt: Date = .now
+		var accessedAt: Date = .now
 	}
 }
