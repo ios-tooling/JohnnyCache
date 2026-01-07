@@ -29,11 +29,10 @@ extension JohnnyCache {
 		let fm = FileManager.default
 		guard let location = configuration.location, let files = try? fm.listAllFiles(in: location) else { return }
 		let sorted = files.sorted { $0.creationDate < $1.creationDate }
-		var total = files.reduce(0, { $0 + $1.size })
 		var index = 0
 		
-		while total > limit, index < sorted.count {
-			total -= sorted[index].size
+		while onDiskCost > limit, index < sorted.count {
+			onDiskCost -= sorted[index].size
 			try? fm.removeItem(at: sorted[index].url)
 			index += 1
 		}

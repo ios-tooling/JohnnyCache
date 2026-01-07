@@ -106,7 +106,8 @@ import Foundation
 	
 	func storeInMemory(_ element: Element?, forKey key: Key) {
 		if let element {
-			cache[key] = .init(key: key, element: element)
+			inMemoryCost -= cache[key]?.cacheCost ?? 0
+			cache[key] = .init(key: key, element: element, cacheCost: element.cacheCost)
 			inMemoryCost += element.cacheCost
 			checkInMemorySize()
 		} else {

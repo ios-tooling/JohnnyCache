@@ -9,8 +9,9 @@ import Foundation
 
 extension JohnnyCache {
 	struct CachedItem: Sendable {
-		let key: Key
-		let element: Element
+		var key: Key
+		var element: Element
 		var accessedAt: Date = .now
+		var cacheCost: UInt64
 	}
 }
