@@ -11,12 +11,12 @@ import OSLog
 @MainActor public class JohnnyCache<Key: CacheableKey, Element: CacheableElement> {
 	var cache: [Key: CachedItem] = [:]
 	var configuration: Configuration
-	var fetchElement: FetchElement?
-	var inMemoryCost: UInt64 = 0
-	var onDiskCost: UInt64 = 0
+	public var fetchElement: FetchElement?
+	public internal(set) var inMemoryCost: UInt64 = 0
+	public internal(set) var onDiskCost: UInt64 = 0
 
 	// Tracks in-flight fetch operations to prevent duplicate requests for the same key
-	internal var inFlightFetches: [Key: Task<Element?, Never>] = [:]
+	internal var inFlightFetches: [Key: Task<Element?, Error>] = [:]
 
 	private let logger = Logger(subsystem: "com.standalone.JohnnyCache", category: "cache")
 
@@ -62,12 +62,12 @@ import OSLog
 	}
 	
 	public subscript(async key: Key) -> Element? {
-		get async {
+		get async throws {
 			if let cached = self[key] { return cached }
 
 			// Check if there's already a fetch in progress for this key
 			if let existingTask = inFlightFetches[key] {
-				return await existingTask.value
+				return try await existingTask.value
 			}
 
 			// No fetch element configured
@@ -82,12 +82,12 @@ import OSLog
 					return newValue
 				} catch {
 					report(error: error, context: "Failed to fetch item for key \(key)")
-					return nil
+					throw error
 				}
 			}
 
 			inFlightFetches[key] = task
-			let result = await task.value
+			let result = try await task.value
 			inFlightFetches.removeValue(forKey: key)
 
 			return result
