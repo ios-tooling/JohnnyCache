@@ -18,7 +18,7 @@ extension FileManager {
 		case notAFile(URL)
 	}
 	
-	func setModificationDate(at url: URL, to date: Date = .now) {
+	func setModificationDate(at url: URL, to date: Date = Date()) {
 		try? FileManager.default.setAttributes([.modificationDate: date], ofItemAtPath: url.path)
 	}
 	

@@ -11,7 +11,7 @@ extension JohnnyCache {
 	func inMemoryElement(for key: Key) -> Element? {
 		guard var item = cache[key] else { return nil }
 		
-		item.accessedAt = .now
+		item.accessedAt = Date()
 		cache[key] = item
 		return item.element
 	}
