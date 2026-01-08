@@ -15,10 +15,15 @@ extension JohnnyCache {
 
 		public init(
 			location: URL? = URL.cacheDirectory(named: String(describing: Element.self)),
+			name: String? = nil,
 				inMemory: UInt64 = 1024 * 1024 * 100, 	// 100 MB in memory limit
 				onDisk: UInt64 = 1024 * 1024 * 1024, 	// 1 GB on disk limit
 		) {
-			self.location = location
+			if let name {
+				self.location = URL.cacheDirectory(named: name)
+			} else if let location {
+				self.location = location
+			}
 			self.inMemoryLimit = inMemory
 			self.onDiskLimit = onDisk
 		}
