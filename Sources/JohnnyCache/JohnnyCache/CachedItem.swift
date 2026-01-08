@@ -11,7 +11,7 @@ extension JohnnyCache {
 	struct CachedItem: Sendable {
 		var key: Key
 		var element: Element
-		var accessedAt: Date = .now
 		var cacheCost: UInt64
+		var accessedAt = Date()
 	}
 }

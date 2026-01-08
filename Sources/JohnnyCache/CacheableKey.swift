@@ -16,5 +16,11 @@ extension String: CacheableKey {
 }
 
 extension URL: CacheableKey {
-	public var stringRepresentation: String { (host() ?? "localdevice") + "/" + path }
+	public var stringRepresentation: String {
+		if #available(iOS 16.0, *) {
+			(host(percentEncoded: false) ?? "") + "/" + path
+		} else {
+			(host ?? "") + "/" + path
+		}
+	}
 }

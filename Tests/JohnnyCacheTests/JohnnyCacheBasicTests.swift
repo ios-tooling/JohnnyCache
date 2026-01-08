@@ -68,7 +68,7 @@ struct JohnnyCacheBasicTests {
 		#expect(cache["key1"] != nil)
 		#expect(cache["key2"] != nil)
 
-		cache.clearAll(inMemory: true, onDisk: false)
+		cache.clearAll(inMemory: true, onDisk: true)
 
 		#expect(cache["key1"] == nil)
 		#expect(cache["key2"] == nil)
