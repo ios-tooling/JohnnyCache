@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-JohnnyCache is a Swift Package Manager (SPM) library that provides a simple, type-safe caching framework for Apple platforms (macOS 12+, iOS 16+, watchOS 10+). It implements a two-tier caching system with both in-memory and on-disk storage, automatic cache size management, and protocol-based extensibility.
+JohnnyCache is a Swift Package Manager (SPM) library that provides a simple, type-safe caching framework for Apple platforms (macOS 14+, iOS 14+, watchOS 10+). It implements a two-tier caching system with both in-memory and on-disk storage, automatic cache size management, cache stampede prevention, and protocol-based extensibility.
 
 ## Common Commands
 
@@ -16,6 +16,11 @@ swift build
 ### Testing
 ```bash
 swift test
+```
+
+### Running a Single Test
+```bash
+swift test --filter JohnnyCacheBasicTests/testBasicSetGet
 ```
 
 ### Opening in Xcode
@@ -37,7 +42,7 @@ JohnnyCache uses a **generic, protocol-based architecture** with two key protoco
    - Requires serialization methods: `toData()` and `from(data:)`
    - Must specify `cacheCost` (UInt64) for memory management
    - Must specify `uttype` (UTType) for file system storage
-   - Default implementations: `Data`, `UIImage` (iOS only)
+   - Default implementations: `Data`, `UIImage` (iOS), `NSImage` (macOS), and any `Codable` type
 
 ### Two-Tier Caching System
 
@@ -49,31 +54,44 @@ The `JohnnyCache<Key, Element>` class (`@MainActor`) provides:
    - Purges down to 75% of limit when triggered
 
 2. **On-Disk Cache**: File-based storage in configured directory
-   - Files named using `key.stringRepresentation` (slashes replaced with dashes)
+   - Files named using `key.stringRepresentation` (slashes → dashes, colons → semicolons)
    - Tracked via `onDiskCost`
    - Automatic purging based on file creation dates
    - Purges down to 75% of limit when triggered
 
+### Cache Stampede Prevention
+
+When multiple concurrent requests are made for the same uncached key, only one fetch executes. Other requests wait for the same result via `inFlightFetches` task tracking.
+
 ### Access Patterns
 
 - **Synchronous**: `cache[key]` - returns immediately, checks memory then disk
-- **Async with fetch**: `await cache[async: key]` - falls back to provided `FetchElement` closure if cache misses
+- **Async with fetch**: `try await cache[async: key]` - falls back to provided `FetchElement` closure if cache misses, with stampede prevention
+
+### Shared Caches
+
+`sharedImagesCache` is a pre-configured global cache for URL-keyed images:
+- iOS/watchOS: `JohnnyCache<URL, UIImage>`
+- macOS: `JohnnyCache<URL, NSImage>`
 
 ### Key Files
 
-- `JohnnyCache.swift` - Core cache implementation with subscript access
-- `JohnnyCache.Configuration.swift` - Configuration with default limits (100MB memory, 1GB disk)
-- `JohnnyCache+CacheLimits.swift` - Cache purging logic
-- `CachedItem.swift` - Internal wrapper storing element + metadata (storedAt timestamp)
+- `JohnnyCache/JohnnyCache.swift` - Core cache class with subscript access
+- `JohnnyCache/JohnnyCache.Configuration.swift` - Configuration (default: 100MB memory, 1GB disk)
+- `JohnnyCache/JohnnyCache+CacheLimits.swift` - Cache purging logic
+- `JohnnyCache/JohnnyCache+RetrieveValue.swift` - Memory and disk retrieval
+- `JohnnyCache/JohnnyCache+StoreValues.swift` - Memory and disk storage
+- `JohnnyCache/CachedItem.swift` - Internal wrapper with `storedAt` timestamp
 - `CacheableKey.swift` & `CacheableElement.swift` - Protocol definitions
+- `Extensions/Codable.swift` - Default CacheableElement conformance for Codable types
 - `Extensions/FileManager.swift` - File enumeration and size utilities
-- `Cacheable Elements/` - Protocol conformances for Data and UIImage
+- `Cacheable Elements/` - Protocol conformances for Data, UIImage, NSImage
 
 ## Key Implementation Details
 
 ### File System Handling
 - Cache directory is created automatically on init
-- Keys with slashes are converted (e.g., "foo/bar" becomes "foo-bar")
+- Keys with slashes/colons are converted (e.g., "foo/bar" → "foo-bar", "http:" → "http;")
 - Files are stored with UTType-based extensions
 - Size tracking uses `FileManager.FileInfo` struct with creation dates for LRU
 
@@ -85,13 +103,15 @@ The `JohnnyCache<Key, Element>` class (`@MainActor`) provides:
 - On-disk uses file creation dates for LRU
 
 ### Error Handling
-- Errors are logged via `report(error:context:)` method (currently prints to console)
+- Errors are logged via `report(error:context:)` method using OSLog
+- Custom error handler can be set via `cache.errorHandler`
 - Failed disk reads/writes don't crash - they return nil/skip storage
-- No throwing from subscripts - errors are caught internally
+- Synchronous subscript catches errors internally; async subscript throws
 
 ## Platform Support
 
-- macOS 12+, iOS 16+, watchOS 10+
+- macOS 14+, iOS 14+, watchOS 10+
+- Swift 6.0+ with strict concurrency
 - Uses `@MainActor` for thread safety
 - Protocols require `Sendable` conformance
-- Conditional compilation for UIKit (`#if canImport(UIKit)`)
+- Conditional compilation: `#if canImport(UIKit)` for iOS, `#if canImport(Cocoa)` for macOS

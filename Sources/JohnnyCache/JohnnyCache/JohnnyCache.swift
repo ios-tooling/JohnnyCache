@@ -87,10 +87,8 @@ import OSLog
 			}
 
 			inFlightFetches[key] = task
-			let result = try await task.value
-			inFlightFetches.removeValue(forKey: key)
-
-			return result
+			defer { inFlightFetches.removeValue(forKey: key) }
+			return try await task.value
 		}
 	}
 	

@@ -29,7 +29,7 @@ struct JohnnyCacheStampedeTests {
 		await withTaskGroup(of: Data?.self) { group in
 			for _ in 0..<10 {
 				group.addTask {
-					await cache[async: "sharedKey"]
+					try? await cache[async: "sharedKey"]
 				}
 			}
 
@@ -61,9 +61,9 @@ struct JohnnyCacheStampedeTests {
 
 		// Fetch different keys concurrently
 		await withTaskGroup(of: Data?.self) { group in
-			group.addTask { await cache[async: "key1"] }
-			group.addTask { await cache[async: "key2"] }
-			group.addTask { await cache[async: "key3"] }
+			group.addTask { try? await cache[async: "key1"] }
+			group.addTask { try? await cache[async: "key2"] }
+			group.addTask { try? await cache[async: "key3"] }
 
 			for await _ in group {}
 		}
@@ -85,7 +85,7 @@ struct JohnnyCacheStampedeTests {
 
 		// Start a fetch
 		let task = Task {
-			await cache[async: "test"]
+			try? await cache[async: "test"]
 		}
 
 		// Give it time to register
@@ -113,12 +113,12 @@ struct JohnnyCacheStampedeTests {
 		}
 
 		// First attempt should fail
-		let first = await cache[async: "test"]
+		let first = try? await cache[async: "test"]
 		#expect(first == nil)
 		#expect(attemptCount == 1)
 
 		// Second attempt should succeed
-		let second = await cache[async: "test"]
+		let second = try? await cache[async: "test"]
 		#expect(second != nil)
 		#expect(attemptCount == 2)
 	}
@@ -137,7 +137,7 @@ struct JohnnyCacheStampedeTests {
 		cache["cached"] = "Cached Data".data(using: .utf8)
 
 		// Async access should return cached value without fetching
-		let result = await cache[async: "cached"]
+		let result = try await cache[async: "cached"]
 
 		#expect(result != nil)
 		#expect(fetchCount == 0, "Should not fetch when value is cached")
@@ -154,8 +154,8 @@ struct JohnnyCacheStampedeTests {
 		}
 
 		// Start multiple fetches
-		let task1 = Task { await cache[async: "key1"] }
-		let task2 = Task { await cache[async: "key2"] }
+		let task1 = Task { try? await cache[async: "key1"] }
+		let task2 = Task { try? await cache[async: "key2"] }
 
 		// Give them time to register
 		try? await Task.sleep(for: .milliseconds(50))
@@ -184,12 +184,12 @@ struct JohnnyCacheStampedeTests {
 		}
 
 		// First request
-		let first = await cache[async: "test"]
+		let first = try await cache[async: "test"]
 		#expect(first != nil)
 		#expect(fetchCount == 1)
 
 		// Second request should use cached value
-		let second = await cache[async: "test"]
+		let second = try await cache[async: "test"]
 		#expect(second != nil)
 		#expect(fetchCount == 1, "Should still be 1 - used cached value")
 

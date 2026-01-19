@@ -11,12 +11,12 @@ A modern, type-safe caching framework for Apple platforms with automatic memory 
 - **Automatic Size Management**: Configurable memory and disk limits with automatic purging
 - **Async/Await Support**: Modern Swift concurrency with `@MainActor` safety
 - **Protocol-Oriented**: Extend with custom key and element types
-- **Built-in Types**: Works out-of-the-box with `Data`, `UIImage`, `String`, and `URL` keys
+- **Built-in Types**: Works out-of-the-box with `Data`, `UIImage`/`NSImage`, any `Codable` type, plus `String` and `URL` keys
 - **Production-Ready**: Comprehensive test coverage with Swift Testing
 
 ## Requirements
 
-- macOS 13.0+ / iOS 16.0+ / watchOS 10.0+
+- macOS 14.0+ / iOS 16.0+ / watchOS 10.0+
 - Swift 6.0+
 - Xcode 16.0+
 
@@ -79,6 +79,40 @@ if let cachedImage = imageCache[imageURL] {
 }
 ```
 
+### Caching Codable Types
+
+Any `Codable` type automatically conforms to `CacheableElement` - no extra code needed:
+
+```swift
+struct UserProfile: Codable, Sendable {
+    let id: Int
+    let name: String
+    let email: String
+    let createdAt: Date  // Dates use ISO8601 encoding
+}
+
+// Just use it directly - Codable conformance is automatic!
+let cache = JohnnyCache<String, UserProfile>()
+
+cache["user_123"] = UserProfile(id: 123, name: "Alice", email: "alice@example.com", createdAt: Date())
+
+if let user = cache["user_123"] {
+    print("Hello, \(user.name)!")
+}
+```
+
+### Shared Image Cache
+
+JohnnyCache provides a pre-configured global image cache:
+
+```swift
+// iOS/watchOS
+let image = try await sharedImagesCache[async: imageURL]  // JohnnyCache<URL, UIImage>
+
+// macOS
+let image = try await sharedImagesCache[async: imageURL]  // JohnnyCache<URL, NSImage>
+```
+
 ### Async Fetching with Automatic Caching
 
 ```swift
@@ -90,15 +124,15 @@ let cache = JohnnyCache<URL, Data> { url in
 }
 
 // First call fetches from network and caches
-let data1 = await cache[async: imageURL]
+let data1 = try await cache[async: imageURL]
 
 // Second call returns cached data instantly
-let data2 = await cache[async: imageURL]
+let data2 = try await cache[async: imageURL]
 
 // Concurrent calls are deduplicated (stampede prevention)
 await withTaskGroup(of: Data?.self) { group in
     for _ in 0..<10 {
-        group.addTask { await cache[async: imageURL] }
+        group.addTask { try? await cache[async: imageURL] }
     }
     // Only ONE network request is made!
 }
@@ -144,10 +178,10 @@ cache.errorHandler = { error, context in
 
 ### Custom Cacheable Types
 
-Conform to `CacheableElement` to cache custom types:
+For non-Codable types or when you need custom serialization, conform to `CacheableElement`:
 
 ```swift
-struct UserProfile: Codable, CacheableElement, Sendable {
+struct UserProfile: CacheableElement, Sendable {
     let name: String
     let avatar: URL
 
@@ -161,9 +195,9 @@ struct UserProfile: Codable, CacheableElement, Sendable {
         try JSONDecoder().decode(Self.self, from: data)
     }
 
-    // Memory cost in bytes
+    // Memory cost in bytes (be accurate for proper LRU eviction)
     var cacheCost: UInt64 {
-        UInt64(MemoryLayout<UserProfile>.size)
+        UInt64(name.utf8.count + avatar.absoluteString.utf8.count)
     }
 
     // File type for disk storage
@@ -174,6 +208,8 @@ struct UserProfile: Codable, CacheableElement, Sendable {
 let cache = JohnnyCache<String, UserProfile>()
 cache["user_123"] = UserProfile(name: "Alice", avatar: avatarURL)
 ```
+
+> **Note**: `Codable` types get automatic `CacheableElement` conformance. Only implement this protocol manually when you need custom serialization or more accurate cost calculation.
 
 ### Custom Key Types
 
@@ -236,9 +272,9 @@ Task { await fetch("image.jpg") }  // Makes DUPLICATE request
 Task { await fetch("image.jpg") }  // Makes DUPLICATE request
 
 // With JohnnyCache (good):
-Task { await cache[async: "image.jpg"] }  // Makes network request
-Task { await cache[async: "image.jpg"] }  // Waits for first request
-Task { await cache[async: "image.jpg"] }  // Waits for first request
+Task { try? await cache[async: "image.jpg"] }  // Makes network request
+Task { try? await cache[async: "image.jpg"] }  // Waits for first request
+Task { try? await cache[async: "image.jpg"] }  // Waits for first request
 // Result: Only ONE network request, all tasks get the same result
 ```
 
@@ -255,7 +291,7 @@ Load from disk → Store in memory → Return
     ↓ (miss)
 Return nil
 
-await cache[async: key]
+try await cache[async: key]
     ↓
 Check in-memory cache
     ↓ (miss)
@@ -265,6 +301,8 @@ Check if fetch already in-flight
     ↓ (yes: wait for it)
     ↓ (no: start new fetch)
 Call fetch closure → Store result → Return
+    ↓ (error)
+Clean up in-flight state → Throw (allows retry)
 ```
 
 ## Best Practices
@@ -345,6 +383,7 @@ xcodebuild test -scheme JohnnyCache -destination 'platform=macOS'
 
 Test suites cover:
 - Basic cache operations (CRUD, persistence)
+- Codable type caching (serialization, dates, nested types)
 - Cost accounting accuracy
 - LRU eviction behavior
 - Cache stampede prevention
@@ -367,17 +406,23 @@ Test suites cover:
 
 ```
 JohnnyCache/
-├── JohnnyCache.swift              # Core cache class
-├── JohnnyCache+RetrieveValue.swift # Get operations
-├── JohnnyCache+StoreValues.swift  # Set/remove operations
-├── JohnnyCache+CacheLimits.swift  # Eviction & purging
-├── JohnnyCache.Configuration.swift # Configuration
-├── CachedItem.swift               # Internal item wrapper
+├── JohnnyCache/
+│   ├── JohnnyCache.swift              # Core cache class
+│   ├── JohnnyCache+RetrieveValue.swift # Get operations
+│   ├── JohnnyCache+StoreValues.swift  # Set/remove operations
+│   ├── JohnnyCache+CacheLimits.swift  # Eviction & purging
+│   ├── JohnnyCache.Configuration.swift # Configuration
+│   └── CachedItem.swift               # Internal item wrapper
 ├── CacheableKey.swift             # Key protocol
 ├── CacheableElement.swift         # Element protocol
+├── SharedCaches.swift             # Pre-configured sharedImagesCache
+├── Extensions/
+│   ├── Codable.swift              # Automatic CacheableElement for Codable types
+│   └── FileManager.swift          # File utilities
 └── Cacheable Elements/
     ├── Data+CacheableElement.swift
-    └── UIImage+CacheableElement.swift
+    ├── UIImage+CacheableElement.swift  # iOS/watchOS
+    └── NSImage+CacheableElement.swift  # macOS
 ```
 
 ## Thread Safety

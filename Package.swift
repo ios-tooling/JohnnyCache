@@ -8,7 +8,7 @@ let package = Package(
     name: "JohnnyCache",
      platforms: [
               .macOS(.v14),
-              .iOS(.v14),
+              .iOS(.v16),
               .watchOS(.v10),
          ],
     products: [
