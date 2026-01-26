@@ -47,23 +47,23 @@ import OSLog
 		}
 	}
 	
-	public subscript(key: Key) -> Element? {
+	public subscript(key: Key, maxAge maxAge: TimeInterval? = nil, newerThan newerThan: Date? = nil) -> Element? {
 		get {
-			if let inMemory = inMemoryElement(for: key) { return inMemory }
-			if let onDisk = onDiskElement(for: key) { return onDisk }
+			if let inMemory = inMemoryElement(for: key, maxAge: maxAge, newerThan: newerThan) { return inMemory }
+			if let onDisk = onDiskElement(for: key, maxAge: maxAge, newerThan: newerThan) { return onDisk }
 			
 			return nil
 		}
 		
 		set {
-			storeInMemory(newValue, forKey: key)
+			storeInMemory(newValue, forKey: key, cachedAt: .now)
 			storeOnDisk(newValue, forKey: key)
 		}
 	}
 	
-	public subscript(async key: Key) -> Element? {
+	public subscript(async key: Key, maxAge maxAge: TimeInterval? = nil, newerThan newerThan: Date? = nil) -> Element? {
 		get async throws {
-			if let cached = self[key] { return cached }
+			if let cached = self[key, maxAge: maxAge, newerThan: newerThan] { return cached }
 
 			// Check if there's already a fetch in progress for this key
 			if let existingTask = inFlightFetches[key] {
@@ -77,7 +77,7 @@ import OSLog
 			let task = Task { @MainActor in
 				do {
 					let newValue = try await fetchElement(key)
-					storeInMemory(newValue, forKey: key)
+					storeInMemory(newValue, forKey: key, cachedAt: .now)
 					storeOnDisk(newValue, forKey: key)
 					return newValue
 				} catch {

@@ -13,5 +13,13 @@ extension JohnnyCache {
 		var element: Element
 		var cacheCost: UInt64
 		var accessedAt = Date()
+		var cachedAt: Date
+		
+		init(key: Key, element: Element, cacheCost: UInt64, cachedAt: Date? = nil) {
+			self.key = key
+			self.element = element
+			self.cacheCost = cacheCost
+			self.cachedAt = cachedAt ?? .now
+		}
 	}
 }

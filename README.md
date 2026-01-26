@@ -6,6 +6,7 @@ A modern, type-safe caching framework for Apple platforms with automatic memory 
 
 - **Two-Tier Caching**: Automatic in-memory and on-disk storage
 - **True LRU Eviction**: Tracks access times for accurate least-recently-used eviction
+- **Cache Expiration**: Optional `maxAge` and `newerThan` parameters for freshness control
 - **Cache Stampede Prevention**: Deduplicates concurrent requests for the same key
 - **Type-Safe**: Generic design works with any `Hashable` key and cacheable element
 - **Automatic Size Management**: Configurable memory and disk limits with automatic purging
@@ -136,6 +137,42 @@ await withTaskGroup(of: Data?.self) { group in
     }
     // Only ONE network request is made!
 }
+```
+
+### Cache Expiration
+
+Control cache freshness with `maxAge` and `newerThan` parameters:
+
+```swift
+let cache = JohnnyCache<String, Data>()
+
+// Only return if cached within the last 60 seconds
+if let fresh = cache["key", maxAge: 60] {
+    print("Fresh data!")
+}
+
+// Only return if cached after a specific date
+let cutoff = Date().addingTimeInterval(-3600)  // 1 hour ago
+if let recent = cache["key", newerThan: cutoff] {
+    print("Recent data!")
+}
+
+// Combine both constraints
+if let valid = cache["key", maxAge: 300, newerThan: lastKnownUpdate] {
+    print("Valid data!")
+}
+```
+
+With async fetching, expired items trigger a re-fetch:
+
+```swift
+let cache = JohnnyCache<URL, Data> { url in
+    let (data, _) = try await URLSession.shared.data(from: url)
+    return data
+}
+
+// Re-fetches if cached data is older than 5 minutes
+let data = try await cache[async: apiURL, maxAge: 300]
 ```
 
 ## Configuration
@@ -383,6 +420,7 @@ xcodebuild test -scheme JohnnyCache -destination 'platform=macOS'
 
 Test suites cover:
 - Basic cache operations (CRUD, persistence)
+- Cache age and expiration (maxAge, newerThan)
 - Codable type caching (serialization, dates, nested types)
 - Cost accounting accuracy
 - LRU eviction behavior

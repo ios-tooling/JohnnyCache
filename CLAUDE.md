@@ -68,6 +68,19 @@ When multiple concurrent requests are made for the same uncached key, only one f
 - **Synchronous**: `cache[key]` - returns immediately, checks memory then disk
 - **Async with fetch**: `try await cache[async: key]` - falls back to provided `FetchElement` closure if cache misses, with stampede prevention
 
+### Cache Expiration
+
+Both subscripts support optional age parameters:
+- **`maxAge: TimeInterval?`** - Only return if cached within this many seconds
+- **`newerThan: Date?`** - Only return if cached after this date
+
+Examples:
+- `cache["key", maxAge: 60]` - returns nil if cached more than 60 seconds ago
+- `cache["key", newerThan: lastUpdate]` - returns nil if cached before `lastUpdate`
+- `try await cache[async: "key", maxAge: 300]` - re-fetches if older than 5 minutes
+
+Age is tracked via `cachedAt` timestamp (separate from `accessedAt` used for LRU). On-disk items use file creation date.
+
 ### Shared Caches
 
 `sharedImagesCache` is a pre-configured global cache for URL-keyed images:
@@ -81,7 +94,7 @@ When multiple concurrent requests are made for the same uncached key, only one f
 - `JohnnyCache/JohnnyCache+CacheLimits.swift` - Cache purging logic
 - `JohnnyCache/JohnnyCache+RetrieveValue.swift` - Memory and disk retrieval
 - `JohnnyCache/JohnnyCache+StoreValues.swift` - Memory and disk storage
-- `JohnnyCache/CachedItem.swift` - Internal wrapper with `storedAt` timestamp
+- `JohnnyCache/CachedItem.swift` - Internal wrapper with `cachedAt` and `accessedAt` timestamps
 - `CacheableKey.swift` & `CacheableElement.swift` - Protocol definitions
 - `Extensions/Codable.swift` - Default CacheableElement conformance for Codable types
 - `Extensions/FileManager.swift` - File enumeration and size utilities
@@ -99,8 +112,9 @@ When multiple concurrent requests are made for the same uncached key, only one f
 - Size limits are enforced **after** adding items (not before)
 - Purging is triggered when cost exceeds limit
 - Purge targets 75% of limit to reduce thrashing
-- In-memory uses `storedAt` timestamp for LRU
-- On-disk uses file creation dates for LRU
+- In-memory uses `accessedAt` timestamp for LRU eviction
+- On-disk uses file modification dates for LRU eviction
+- `cachedAt` tracks original cache time (for expiration), separate from `accessedAt` (for LRU)
 
 ### Error Handling
 - Errors are logged via `report(error:context:)` method using OSLog

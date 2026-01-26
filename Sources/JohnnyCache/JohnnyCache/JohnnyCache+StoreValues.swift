@@ -8,10 +8,10 @@
 import Foundation
 
 extension JohnnyCache {
-	func storeInMemory(_ element: Element?, forKey key: Key) {
+	func storeInMemory(_ element: Element?, forKey key: Key, cachedAt: Date?) {
 		if let element {
 			inMemoryCost -= cache[key]?.cacheCost ?? 0
-			cache[key] = .init(key: key, element: element, cacheCost: element.cacheCost)
+			cache[key] = .init(key: key, element: element, cacheCost: element.cacheCost, cachedAt: cachedAt)
 			inMemoryCost += element.cacheCost
 			checkInMemorySize()
 		} else {
