@@ -58,6 +58,13 @@ import OSLog
 		set {
 			storeInMemory(newValue, forKey: key, cachedAt: .now)
 			storeOnDisk(newValue, forKey: key)
+
+			// Store to CloudKit if configured (in background)
+			if configuration.cloudKitInfo != nil {
+				Task {
+					try? await storeInCloudKit(newValue, forKey: key)
+				}
+			}
 		}
 	}
 	
@@ -71,19 +78,39 @@ import OSLog
 			}
 
 			// No fetch element configured
-			guard let fetchElement else { return nil }
+			guard fetchElement != nil else { return nil }
 
 			// Create and track new fetch task
-			let task = Task { @MainActor in
+			let task: Task<Element?, Error> = Task { @MainActor in
 				do {
-					let newValue = try await fetchElement(key)
-					storeInMemory(newValue, forKey: key, cachedAt: .now)
-					storeOnDisk(newValue, forKey: key)
-					return newValue
+					if configuration.cloudKitInfo != nil {
+						if let cloudKitValue = try await cloudKitElement(for: key, maxAge: maxAge, newerThan: newerThan) {
+							storeInMemory(cloudKitValue, forKey: key, cachedAt: .now)
+							storeOnDisk(cloudKitValue, forKey: key)
+							return cloudKitValue
+						}
+					}
+
+					if let fetchElement {
+						let newValue = try await fetchElement(key)
+						storeInMemory(newValue, forKey: key, cachedAt: .now)
+						storeOnDisk(newValue, forKey: key)
+
+						// Store to CloudKit if configured (in background to avoid blocking)
+						if configuration.cloudKitInfo != nil {
+							Task {
+								try? await storeInCloudKit(newValue, forKey: key)
+							}
+						}
+
+						return newValue
+					}
 				} catch {
 					report(error: error, context: "Failed to fetch item for key \(key)")
 					throw error
 				}
+				
+				return nil
 			}
 
 			inFlightFetches[key] = task

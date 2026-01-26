@@ -1,11 +1,12 @@
 //
-//  File.swift
+//  JohnnyCache+StoreValues.swift
 //  JohnnyCache
 //
 //  Created by Ben Gottlieb on 1/7/26.
 //
 
 import Foundation
+import CloudKit
 
 extension JohnnyCache {
 	func storeInMemory(_ element: Element?, forKey key: Key, cachedAt: Date?) {
@@ -43,5 +44,58 @@ extension JohnnyCache {
 		}
 	}
 	
+	func recordID(forKey key: Key) -> CKRecord.ID? {
+		guard let info = configuration.cloudKitInfo else { return nil }
+
+		return CKRecord.ID(recordName: info.recordName + ":" + key.stringRepresentation)
+	}
+	
+	func storeInCloudKit(_ element: Element?, forKey key: Key) async throws {
+		guard let info = configuration.cloudKitInfo, let recordID = recordID(forKey: key) else { return }
+		var tempFileURL: URL?
+		
+		let database = info.container.publicCloudDatabase
+
+		if let element {
+			// Store element in CloudKit
+			let data = try element.toData()
+
+			// Fetch existing record or create new one
+			let record: CKRecord
+			do {
+				record = try await database.record(for: recordID)
+			} catch let error as CKError where error.code == .unknownItem {
+				// Record doesn't exist, create new one
+				record = CKRecord(recordType: info.recordName, recordID: recordID)
+			} catch {
+				throw error
+			}
+
+			// Store data in the record
+			if data.count > info.assetLimit {
+				let tempURL = URL.temporaryDirectory.appendingPathComponent(recordID.recordName)
+				try data.write(to: tempURL, options: .atomic)
+				tempFileURL = tempURL
+				record["data_asset"] = CKAsset(fileURL: tempURL)
+				record["data"] = nil
+			} else {
+				record["data_asset"] = nil
+				record["data"] = data
+			}
+			// Save to CloudKit
+			try await database.save(record)
+		} else {
+			// Delete element from CloudKit
+			do {
+				try await database.deleteRecord(withID: recordID)
+			} catch let error as CKError where error.code == .unknownItem {
+				// Record doesn't exist - not an error
+				return
+			} catch {
+				throw error
+			}
+		}
+		if let tempFileURL { try? FileManager.default.removeItem(at: tempFileURL) }
+	}
 
 }
