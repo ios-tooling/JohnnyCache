@@ -20,6 +20,7 @@ extension JohnnyCache {
 			name: String? = nil,
 				inMemory: UInt64 = 1024 * 1024 * 100, 	// 100 MB in memory limit
 				onDisk: UInt64 = 1024 * 1024 * 1024, 	// 1 GB on disk limit
+				cloudKitInfo: CloudKitInfo? = nil
 		) {
 			if let name {
 				self.location = URL.cacheDirectory(named: name)
@@ -28,6 +29,7 @@ extension JohnnyCache {
 			}
 			self.inMemoryLimit = inMemory
 			self.onDiskLimit = onDisk
+			self.cloudKitInfo = cloudKitInfo
 		}
 		
 		public struct CloudKitInfo {

@@ -51,7 +51,7 @@ extension JohnnyCache {
 	}
 	
 	func storeInCloudKit(_ element: Element?, forKey key: Key) async throws {
-		guard let info = configuration.cloudKitInfo, let recordID = recordID(forKey: key) else { return }
+		guard isSignedInToCloudKit, let info = configuration.cloudKitInfo, let recordID = recordID(forKey: key) else { return }
 		var tempFileURL: URL?
 		
 		let database = info.container.publicCloudDatabase
@@ -82,8 +82,18 @@ extension JohnnyCache {
 				record["data_asset"] = nil
 				record["data"] = data
 			}
-			// Save to CloudKit
-			try await database.save(record)
+			do {
+				// Save to CloudKit
+				try await database.save(record)
+			} catch let error as CKError {
+				if error.code == .permissionFailure {
+					#if targetEnvironment(simulator)
+					print("☁️ Make sure you've properly set Create Permissions on \"\(info.recordName)\" records in your CloudKit dashboard. https://icloud.developer.apple.com/dashboard/database/")
+					#endif
+					return
+				}
+				throw error
+			}
 		} else {
 			// Delete element from CloudKit
 			do {

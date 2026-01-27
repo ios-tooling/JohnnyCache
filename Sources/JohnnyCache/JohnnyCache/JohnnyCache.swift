@@ -11,6 +11,7 @@ import OSLog
 @MainActor public class JohnnyCache<Key: CacheableKey, Element: CacheableElement> {
 	var cache: [Key: CachedItem] = [:]
 	var configuration: Configuration
+	var isSignedInToCloudKit = false
 	public var fetchElement: FetchElement?
 	public internal(set) var inMemoryCost: UInt64 = 0
 	public internal(set) var onDiskCost: UInt64 = 0
@@ -37,6 +38,7 @@ import OSLog
 	public init(configuration config: Configuration = .init(), fetch: FetchElement? = nil) {
 		configuration = config
 		fetchElement = fetch
+		setupCloudKit()
 		
 		if let url = config.location {
 			let fm = FileManager.default
@@ -78,7 +80,7 @@ import OSLog
 			}
 
 			// No fetch element configured
-			guard fetchElement != nil else { return nil }
+			guard fetchElement != nil || configuration.cloudKitInfo != nil else { return nil }
 
 			// Create and track new fetch task
 			let task: Task<Element?, Error> = Task { @MainActor in
