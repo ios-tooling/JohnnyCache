@@ -374,8 +374,17 @@ cache.clearAll(inMemory: true, onDisk: false)
 // Clear only disk cache
 cache.clearAll(inMemory: false, onDisk: true)
 
-// Clear everything
+// Clear local caches (backward compatible)
 cache.clearAll()
+
+// Clear with CloudKit (async)
+try await cache.clearAllCaches(inMemory: true, onDisk: true, cloudKit: false)
+
+// Clear CloudKit only (affects all devices!)
+try await cache.clearAllCaches(inMemory: false, onDisk: false, cloudKit: true)
+
+// Clear everything including CloudKit (nuclear option)
+try await cache.clearAllCaches(inMemory: true, onDisk: true, cloudKit: true)
 
 // Manual purging
 cache.purgeInMemory(downTo: 10 * 1024 * 1024)  // Purge down to 10MB
@@ -383,7 +392,7 @@ cache.purgeInMemory(downTo: 10 * 1024 * 1024)  // Purge down to 10MB
 
 ## How It Works
 
-### Two-Tier Architecture
+### Three-Tier Architecture
 
 1. **In-Memory Cache**: Fast dictionary-based storage with LRU eviction
    - Items are stored with access timestamps
@@ -394,6 +403,12 @@ cache.purgeInMemory(downTo: 10 * 1024 * 1024)  // Purge down to 10MB
    - Files named using sanitized key representations
    - Modification dates updated on access for LRU tracking
    - Automatic purging when disk limit is exceeded
+
+3. **CloudKit Cache** (optional): Cloud-based storage synced across devices
+   - Configured via `CloudKitInfo` with container and record type
+   - Smart storage: small data in records, large data as CKAssets
+   - Background sync operations to avoid blocking UI
+   - Requires iCloud account and entitlements
 
 ### Cache Stampede Prevention
 
@@ -414,6 +429,7 @@ Task { try? await cache[async: "image.jpg"] }  // Waits for first request
 
 ### Access Pattern
 
+**Synchronous** (local only):
 ```
 cache[key]
     ↓
@@ -424,20 +440,29 @@ Check disk cache
 Load from disk → Store in memory → Return
     ↓ (miss)
 Return nil
+```
 
+**Asynchronous** (with CloudKit and network):
+```
 try await cache[async: key]
     ↓
 Check in-memory cache
     ↓ (miss)
 Check disk cache
     ↓ (miss)
+Check CloudKit cache (if configured)
+    ↓ (hit)
+Load from CloudKit → Store locally → Return
+    ↓ (miss)
 Check if fetch already in-flight
     ↓ (yes: wait for it)
     ↓ (no: start new fetch)
-Call fetch closure → Store result → Return
+Call fetch closure → Store in all tiers → Return
     ↓ (error)
 Clean up in-flight state → Throw (allows retry)
 ```
+
+**Note**: CloudKit storage happens in a background Task to avoid blocking the return.
 
 ## Best Practices
 
@@ -508,22 +533,28 @@ let cache = JohnnyCache<URL, Data> { url in
 JohnnyCache includes comprehensive test coverage using Swift Testing:
 
 ```bash
-# Run tests in Xcode
-Cmd + U
+# Run all tests
+swift test
 
-# Or via command line (requires Xcode)
-xcodebuild test -scheme JohnnyCache -destination 'platform=macOS'
+# Run specific test suite
+swift test --filter JohnnyCacheCloudKitTests
+
+# Run single test
+swift test --filter JohnnyCacheBasicTests/testBasicSetGet
 ```
 
 Test suites cover:
 - Basic cache operations (CRUD, persistence)
 - Cache age and expiration (maxAge, newerThan)
+- **CloudKit integration** (configuration, clearing, storage logic)
 - Codable type caching (serialization, dates, nested types)
 - Cost accounting accuracy
 - LRU eviction behavior
 - Cache stampede prevention
 - Concurrent access patterns
 - Error handling
+
+**72 tests** total, including 16 CloudKit-specific tests that verify logic without requiring actual CloudKit connectivity.
 
 ## Performance Characteristics
 
@@ -542,22 +573,23 @@ Test suites cover:
 ```
 JohnnyCache/
 ├── JohnnyCache/
-│   ├── JohnnyCache.swift              # Core cache class
-│   ├── JohnnyCache+RetrieveValue.swift # Get operations
-│   ├── JohnnyCache+StoreValues.swift  # Set/remove operations
-│   ├── JohnnyCache+CacheLimits.swift  # Eviction & purging
-│   ├── JohnnyCache.Configuration.swift # Configuration
-│   └── CachedItem.swift               # Internal item wrapper
-├── CacheableKey.swift             # Key protocol
-├── CacheableElement.swift         # Element protocol
-├── SharedCaches.swift             # Pre-configured sharedImagesCache
+│   ├── JohnnyCache.swift                  # Core cache class
+│   ├── JohnnyCache+RetrieveValue.swift    # Get operations (memory, disk, CloudKit)
+│   ├── JohnnyCache+StoreValues.swift      # Set/remove operations (all tiers)
+│   ├── JohnnyCache+CloudKit.swift         # CloudKit sign-in detection
+│   ├── JohnnyCache+CacheLimits.swift      # Eviction & purging
+│   ├── JohnnyCache.Configuration.swift    # Configuration + CloudKitInfo
+│   └── CachedItem.swift                   # Internal item wrapper
+├── CacheableKey.swift                 # Key protocol
+├── CacheableElement.swift             # Element protocol
+├── SharedCaches.swift                 # Pre-configured sharedImagesCache
 ├── Extensions/
-│   ├── Codable.swift              # Automatic CacheableElement for Codable types
-│   └── FileManager.swift          # File utilities
+│   ├── Codable.swift                  # Automatic CacheableElement for Codable types
+│   └── FileManager.swift              # File utilities
 └── Cacheable Elements/
     ├── Data+CacheableElement.swift
-    ├── UIImage+CacheableElement.swift  # iOS/watchOS
-    └── NSImage+CacheableElement.swift  # macOS
+    ├── UIImage+CacheableElement.swift     # iOS/watchOS
+    └── NSImage+CacheableElement.swift     # macOS
 ```
 
 ## Thread Safety
@@ -577,6 +609,26 @@ Task.detached {
     }
 }
 ```
+
+## Demo App
+
+A complete SwiftUI demo app is included in `Tests/Test Harness/` that showcases CloudKit integration:
+
+### Features
+- Image gallery with CloudKit-backed caching
+- Real-time cache statistics (memory, disk, CloudKit)
+- Color-coded indicators showing cache source (memory, disk, network)
+- CloudKit account status checking
+- Cache management UI with CloudKit clearing options
+- Uses modern `@Observable` pattern (iOS 17+)
+
+### Running the Demo
+```bash
+cd "Tests/Test Harness"
+open JohnnyCacheTest.xcodeproj
+```
+
+See `Tests/Test Harness/README.md` for complete setup instructions.
 
 ## Contributing
 
