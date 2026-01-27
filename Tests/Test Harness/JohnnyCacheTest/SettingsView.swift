@@ -12,6 +12,9 @@ struct SettingsView: View {
 	@State private var cacheManager = ImageCacheManager.shared
 	@State private var cloudKitStatus: CKAccountStatus?
 	@State private var isCheckingCloudKit = false
+	@State private var isClearingCloudKit = false
+	@State private var showingClearCloudKitAlert = false
+	@State private var showingClearAllAlert = false
 
 	var body: some View {
 		NavigationView {
@@ -43,7 +46,7 @@ struct SettingsView: View {
 					}
 				}
 
-				Section("Cache Management") {
+				Section("Local Cache Management") {
 					Button("Clear Memory Cache") {
 						cacheManager.clearCache(inMemory: true, onDisk: false)
 					}
@@ -52,9 +55,29 @@ struct SettingsView: View {
 						cacheManager.clearCache(inMemory: false, onDisk: true)
 					}
 
-					Button("Clear All Caches", role: .destructive) {
+					Button("Clear Memory & Disk", role: .destructive) {
 						cacheManager.clearCache()
 					}
+				}
+
+				Section(header: Text("CloudKit Cache Management"), footer: Text("CloudKit cache is shared across all your devices. Clearing it will affect all devices signed into your iCloud account.")) {
+
+					if isClearingCloudKit {
+						HStack {
+							ProgressView()
+							Text("Clearing CloudKit cache...")
+						}
+					}
+
+					Button("Clear CloudKit Cache Only", role: .destructive) {
+						showingClearCloudKitAlert = true
+					}
+					.disabled(isClearingCloudKit)
+
+					Button("Clear All Caches (Including CloudKit)", role: .destructive) {
+						showingClearAllAlert = true
+					}
+					.disabled(isClearingCloudKit)
 				}
 
 				Section("About") {
@@ -74,6 +97,26 @@ struct SettingsView: View {
 			.navigationTitle("Settings")
 			.task {
 				await checkCloudKitStatus()
+			}
+			.alert("Clear CloudKit Cache", isPresented: $showingClearCloudKitAlert) {
+				Button("Clear CloudKit", role: .destructive) {
+					Task {
+						await clearCloudKit()
+					}
+				}
+				Button("Cancel", role: .cancel) {}
+			} message: {
+				Text("This will delete all cached images from CloudKit across all your devices. Local caches will remain.")
+			}
+			.alert("Clear All Caches", isPresented: $showingClearAllAlert) {
+				Button("Clear Everything", role: .destructive) {
+					Task {
+						await clearAllCaches()
+					}
+				}
+				Button("Cancel", role: .cancel) {}
+			} message: {
+				Text("This will clear all cached images from memory, disk, AND CloudKit across all devices.")
 			}
 		}
 	}
@@ -116,6 +159,28 @@ struct SettingsView: View {
 		default:
 			return .orange
 		}
+	}
+
+	private func clearCloudKit() async {
+		isClearingCloudKit = true
+		do {
+			try await cacheManager.clearCache(inMemory: false, onDisk: false, cloudKit: true)
+			print("✅ CloudKit cache cleared successfully")
+		} catch {
+			print("❌ Error clearing CloudKit cache: \(error)")
+		}
+		isClearingCloudKit = false
+	}
+
+	private func clearAllCaches() async {
+		isClearingCloudKit = true
+		do {
+			try await cacheManager.clearCache(inMemory: true, onDisk: true, cloudKit: true)
+			print("✅ All caches cleared successfully")
+		} catch {
+			print("❌ Error clearing caches: \(error)")
+		}
+		isClearingCloudKit = false
 	}
 }
 

@@ -10,6 +10,8 @@ import SwiftUI
 struct ImageGalleryView: View {
 	@State private var cacheManager = ImageCacheManager.shared
 	@State private var showingClearAlert = false
+	@State private var showingClearCloudKitAlert = false
+	@State private var showingClearAllAlert = false
 
 	// Sample image URLs from Lorem Picsum
 	let imageURLs: [URL] = [
@@ -58,8 +60,10 @@ struct ImageGalleryView: View {
 						Button(role: .destructive) {
 							showingClearAlert = true
 						} label: {
-							Label("Clear All Cache", systemImage: "trash")
+							Label("Clear Memory & Disk", systemImage: "trash")
 						}
+
+						Divider()
 
 						Button {
 							cacheManager.clearCache(inMemory: true, onDisk: false)
@@ -72,18 +76,52 @@ struct ImageGalleryView: View {
 						} label: {
 							Label("Clear Disk Only", systemImage: "externaldrive")
 						}
+
+						Divider()
+
+						Button(role: .destructive) {
+							showingClearCloudKitAlert = true
+						} label: {
+							Label("Clear CloudKit Cache", systemImage: "icloud.slash")
+						}
+
+						Button(role: .destructive) {
+							showingClearAllAlert = true
+						} label: {
+							Label("Clear All (Including CloudKit)", systemImage: "exclamationmark.triangle")
+						}
 					} label: {
 						Image(systemName: "ellipsis.circle")
 					}
 				}
 			}
-			.alert("Clear Cache", isPresented: $showingClearAlert) {
-				Button("Clear All", role: .destructive) {
+			.alert("Clear Local Cache", isPresented: $showingClearAlert) {
+				Button("Clear Memory & Disk", role: .destructive) {
 					cacheManager.clearCache()
 				}
 				Button("Cancel", role: .cancel) {}
 			} message: {
 				Text("This will remove all cached images from memory and disk. CloudKit data will remain.")
+			}
+			.alert("Clear CloudKit Cache", isPresented: $showingClearCloudKitAlert) {
+				Button("Clear CloudKit", role: .destructive) {
+					Task {
+						try? await cacheManager.clearCache(inMemory: false, onDisk: false, cloudKit: true)
+					}
+				}
+				Button("Cancel", role: .cancel) {}
+			} message: {
+				Text("This will delete all cached images from CloudKit across all your devices. Local caches will remain.")
+			}
+			.alert("Clear All Caches", isPresented: $showingClearAllAlert) {
+				Button("Clear Everything", role: .destructive) {
+					Task {
+						try? await cacheManager.clearCache(inMemory: true, onDisk: true, cloudKit: true)
+					}
+				}
+				Button("Cancel", role: .cancel) {}
+			} message: {
+				Text("This will clear all cached images from memory, disk, AND CloudKit across all devices. This cannot be undone.")
 			}
 		}
 	}

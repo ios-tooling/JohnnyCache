@@ -1,10 +1,12 @@
 # JohnnyCache
 
-A modern, type-safe caching framework for Apple platforms with automatic memory management, LRU eviction, and cache stampede prevention.
+A modern, type-safe caching framework for Apple platforms with automatic memory management, LRU eviction, CloudKit sync, and cache stampede prevention.
 
 ## Features
 
-- **Two-Tier Caching**: Automatic in-memory and on-disk storage
+- **Three-Tier Caching**: Automatic in-memory, on-disk, and CloudKit storage
+- **CloudKit Sync**: Optional cloud-based caching synced across all your devices
+- **Smart Asset Storage**: Automatically uses CKAsset for large data (configurable threshold)
 - **True LRU Eviction**: Tracks access times for accurate least-recently-used eviction
 - **Cache Expiration**: Optional `maxAge` and `newerThan` parameters for freshness control
 - **Cache Stampede Prevention**: Deduplicates concurrent requests for the same key
@@ -174,6 +176,101 @@ let cache = JohnnyCache<URL, Data> { url in
 // Re-fetches if cached data is older than 5 minutes
 let data = try await cache[async: apiURL, maxAge: 300]
 ```
+
+## CloudKit Integration
+
+Enable CloudKit caching to sync data across all your devices:
+
+### Setup
+
+1. **Enable iCloud Capability** in your Xcode project
+   - Select your target → Signing & Capabilities
+   - Add "iCloud" capability
+   - Check "CloudKit"
+   - Add or select a CloudKit container
+
+2. **Configure Cache with CloudKit**
+
+```swift
+import CloudKit
+import JohnnyCache
+
+// Configure CloudKit
+let container = CKContainer(identifier: "iCloud.com.yourcompany.yourapp")
+let cloudKitInfo = JohnnyCache<URL, Data>.Configuration.CloudKitInfo(
+    container: container,
+    recordName: "CachedImage",    // CKRecord type name
+    assetLimit: 50_000             // 50KB - larger data uses CKAsset
+)
+
+// Create cache with CloudKit enabled
+var config = JohnnyCache<URL, Data>.Configuration(
+    name: "ImageCache",
+    inMemory: 50 * 1024 * 1024,    // 50 MB
+    onDisk: 200 * 1024 * 1024      // 200 MB
+)
+config.cloudKitInfo = cloudKitInfo
+
+let cache = JohnnyCache<URL, Data>(configuration: config) { url in
+    // Fetch from network on cache miss
+    let (data, _) = try await URLSession.shared.data(from: url)
+    return data
+}
+```
+
+### How It Works
+
+With CloudKit enabled, the async subscript checks all three tiers:
+
+```swift
+// Checks: Memory → Disk → CloudKit → Network
+let data = try await cache[async: imageURL]
+```
+
+**Cache Flow:**
+1. Check in-memory cache (instant)
+2. Check on-disk cache (very fast)
+3. **Check CloudKit** (fast, synced across devices)
+4. Call fetch closure (slow, network-dependent)
+5. Store result in all three tiers
+
+**Storage Strategy:**
+- **Small data** (<50KB by default): Stored in CKRecord's `data` field
+- **Large data** (≥50KB by default): Stored as `CKAsset` for efficiency
+- CloudKit operations happen in background to avoid blocking UI
+
+### Clearing CloudKit Cache
+
+```swift
+// Clear local caches only (old method, still works)
+cache.clearAll(inMemory: true, onDisk: true)
+
+// Clear CloudKit cache only
+try await cache.clearAllCaches(inMemory: false, onDisk: false, cloudKit: true)
+
+// Clear everything including CloudKit
+try await cache.clearAllCaches(inMemory: true, onDisk: true, cloudKit: true)
+```
+
+⚠️ **Important**: Clearing CloudKit cache affects **all devices** signed into your iCloud account!
+
+### CloudKit Dashboard
+
+You can view cached records in the [CloudKit Dashboard](https://icloud.developer.apple.com/dashboard):
+
+1. Select your container
+2. Go to Public Data → Records
+3. Filter by your `recordName` (e.g., "CachedImage")
+4. Inspect records to see:
+   - `data` field for small items
+   - `data_asset` field with CKAsset for large items
+
+### Requirements
+
+- iCloud account (user must be signed in)
+- CloudKit entitlements in your app
+- Network connection for CloudKit operations
+- Uses public CloudKit database by default
 
 ## Configuration
 

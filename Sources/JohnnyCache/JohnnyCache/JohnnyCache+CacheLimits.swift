@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import CloudKit
 
 extension JohnnyCache {
 	func checkInMemorySize() {
@@ -62,4 +63,61 @@ extension JohnnyCache {
 		try? FileManager.default.createDirectory(at: location, withIntermediateDirectories: true)
 		onDiskCost = 0
 	}
+	
+	/// Clears all cached items from CloudKit
+	/// This queries and deletes all records with the configured recordName
+	func clearCloudKit() async throws {
+		guard let info = configuration.cloudKitInfo else { return }
+
+		let database = info.container.publicCloudDatabase
+		let query = CKQuery(recordType: info.recordName, predicate: NSPredicate(value: true))
+
+		do {
+			// Query all records of this type
+			let (matchResults, _) = try await database.records(matching: query)
+
+			// Collect record IDs to delete
+			var recordIDsToDelete: [CKRecord.ID] = []
+			for (recordID, result) in matchResults {
+				switch result {
+				case .success:
+					recordIDsToDelete.append(recordID)
+				case .failure(let error):
+					print("Error fetching record \(recordID): \(error)")
+				}
+			}
+
+			// Delete records in batches if needed
+			guard !recordIDsToDelete.isEmpty else {
+				print("No CloudKit records found to delete")
+				return
+			}
+
+			print("Deleting \(recordIDsToDelete.count) CloudKit records...")
+
+			// Delete all records
+			let modifyResult = try await database.modifyRecords(saving: [], deleting: recordIDsToDelete)
+
+			var deletedCount = 0
+			var failedCount = 0
+
+			for (recordID, result) in modifyResult.deleteResults {
+				switch result {
+				case .success:
+					deletedCount += 1
+				case .failure(let error):
+					failedCount += 1
+					print("Failed to delete record \(recordID): \(error)")
+				}
+			}
+
+			print("✅ Deleted \(deletedCount) CloudKit records" + (failedCount > 0 ? " (failed: \(failedCount))" : ""))
+
+		} catch {
+			report(error: error, context: "Failed to clear CloudKit cache")
+			throw error
+		}
+	}
+
+
 }

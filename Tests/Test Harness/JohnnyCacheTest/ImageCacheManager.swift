@@ -68,6 +68,11 @@ class ImageCacheManager {
 		updateStats()
 	}
 
+	func clearCache(inMemory: Bool = true, onDisk: Bool = true, cloudKit: Bool = false) async throws {
+		try await imageCache.clearAllCaches(inMemory: inMemory, onDisk: onDisk, cloudKit: cloudKit)
+		updateStats()
+	}
+
 	// Fetch image with CloudKit caching
 	func fetchImage(from url: URL) async throws -> Data? {
 		let data = try await imageCache[async: url]

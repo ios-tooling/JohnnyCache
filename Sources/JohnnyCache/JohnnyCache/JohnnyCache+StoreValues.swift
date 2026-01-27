@@ -107,5 +107,4 @@ extension JohnnyCache {
 		}
 		if let tempFileURL { try? FileManager.default.removeItem(at: tempFileURL) }
 	}
-
 }

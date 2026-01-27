@@ -125,6 +125,17 @@ import OSLog
 		if inMemory { clearInMemory() }
 		if onDisk { clearOnDisk() }
 	}
+
+	/// Clears all caches including CloudKit
+	/// - Parameters:
+	///   - inMemory: Clear in-memory cache (default: true)
+	///   - onDisk: Clear on-disk cache (default: true)
+	///   - cloudKit: Clear CloudKit cache (default: false)
+	public func clearAllCaches(inMemory: Bool = true, onDisk: Bool = true, cloudKit: Bool = false) async throws {
+		if inMemory { clearInMemory() }
+		if onDisk { clearOnDisk() }
+		if cloudKit { try await clearCloudKit() }
+	}
 	
 	func onDiskURL(for key: Key) -> URL? {
 		guard let location = configuration.location else { return nil }

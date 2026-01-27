@@ -244,4 +244,29 @@ struct JohnnyCacheCloudKitTests {
 			#expect(cache["key\(i)"] == expected)
 		}
 	}
+
+	@Test("clearAllCaches method exists and is callable")
+	func clearAllCachesMethod() async throws {
+		let cache = JohnnyCache<String, Data>(configuration: .init(location: nil))
+
+		// Should be able to call clearAllCaches without CloudKit configured
+		try await cache.clearAllCaches(inMemory: true, onDisk: true, cloudKit: false)
+
+		// Verify cache is empty
+		#expect(cache.inMemoryCost == 0)
+		#expect(cache.onDiskCost == 0)
+	}
+
+	@Test("clearAllCaches with CloudKit parameter")
+	func clearAllCachesWithCloudKit() async throws {
+		let cache = JohnnyCache<String, Data>(configuration: .init(location: nil))
+
+		let testData = "Test".data(using: .utf8)!
+		cache["test"] = testData
+
+		// Clear with cloudKit = false (should work even without CloudKit config)
+		try await cache.clearAllCaches(inMemory: true, onDisk: true, cloudKit: false)
+
+		#expect(cache["test"] == nil)
+	}
 }
