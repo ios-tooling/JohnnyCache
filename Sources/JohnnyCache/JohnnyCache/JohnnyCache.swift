@@ -58,11 +58,11 @@ import OSLog
 		}
 		
 		set {
-			storeInMemory(newValue, forKey: key, cachedAt: .now)
+			storeInMemory(newValue, forKey: key, cachedAt: Date())
 			storeOnDisk(newValue, forKey: key)
 
 			// Store to CloudKit if configured (in background)
-			if configuration.cloudKitInfo != nil {
+			if #available(iOS 16.0, *), configuration.cloudKitInfo != nil {
 				Task {
 					try? await storeInCloudKit(newValue, forKey: key)
 				}
@@ -87,7 +87,7 @@ import OSLog
 				do {
 					if configuration.cloudKitInfo != nil {
 						if let cloudKitValue = try await cloudKitElement(for: key, maxAge: maxAge, newerThan: newerThan) {
-							storeInMemory(cloudKitValue, forKey: key, cachedAt: .now)
+							storeInMemory(cloudKitValue, forKey: key, cachedAt: Date())
 							storeOnDisk(cloudKitValue, forKey: key)
 							return cloudKitValue
 						}
@@ -95,11 +95,11 @@ import OSLog
 
 					if let fetchElement {
 						let newValue = try await fetchElement(key)
-						storeInMemory(newValue, forKey: key, cachedAt: .now)
+						storeInMemory(newValue, forKey: key, cachedAt: Date())
 						storeOnDisk(newValue, forKey: key)
 
 						// Store to CloudKit if configured (in background to avoid blocking)
-						if configuration.cloudKitInfo != nil {
+						if #available(iOS 16.0, macOS 15, watchOS 10, *), configuration.cloudKitInfo != nil {
 							Task {
 								try? await storeInCloudKit(newValue, forKey: key)
 							}
@@ -134,7 +134,9 @@ import OSLog
 	public func clearAllCaches(inMemory: Bool = true, onDisk: Bool = true, cloudKit: Bool = false) async throws {
 		if inMemory { clearInMemory() }
 		if onDisk { clearOnDisk() }
-		if cloudKit { try await clearCloudKit() }
+		if #available(iOS 16.0, macOS 15, watchOS 10, *), cloudKit {
+			try await clearCloudKit()
+		}
 	}
 	
 	func onDiskURL(for key: Key) -> URL? {

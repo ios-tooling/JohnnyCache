@@ -66,6 +66,7 @@ extension JohnnyCache {
 	
 	/// Clears all cached items from CloudKit
 	/// This queries and deletes all records with the configured recordName
+	@available(iOS 16.0, macOS 15, watchOS 10, *)
 	func clearCloudKit() async throws {
 		guard let info = configuration.cloudKitInfo else { return }
 

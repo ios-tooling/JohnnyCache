@@ -20,7 +20,7 @@ extension JohnnyCache {
 			switch accountStatus {
 			case .available, .restricted:
 				isSignedInToCloudKit = true
-			@unknown default: break
+			default: break
 			}
 		} catch {
 			print("Failed to check CloudKit account status: \(error)")

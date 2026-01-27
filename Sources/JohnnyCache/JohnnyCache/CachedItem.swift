@@ -19,7 +19,7 @@ extension JohnnyCache {
 			self.key = key
 			self.element = element
 			self.cacheCost = cacheCost
-			self.cachedAt = cachedAt ?? .now
+			self.cachedAt = cachedAt ?? Date()
 		}
 	}
 }

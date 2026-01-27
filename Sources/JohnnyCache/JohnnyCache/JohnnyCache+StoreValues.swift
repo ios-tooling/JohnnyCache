@@ -50,6 +50,7 @@ extension JohnnyCache {
 		return CKRecord.ID(recordName: info.recordName + ":" + key.stringRepresentation)
 	}
 	
+	@available(iOS 16.0, macOS 15, watchOS 10, *)
 	func storeInCloudKit(_ element: Element?, forKey key: Key) async throws {
 		guard isSignedInToCloudKit, let info = configuration.cloudKitInfo, let recordID = recordID(forKey: key) else { return }
 		var tempFileURL: URL?
