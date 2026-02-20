@@ -62,7 +62,7 @@ import OSLog
 			storeOnDisk(newValue, forKey: key)
 
 			// Store to CloudKit if configured (in background)
-			if #available(iOS 16.0, *), configuration.cloudKitInfo != nil {
+			if #available(macOS 15.0, iOS 16.0, watchOS 10.0, *), configuration.cloudKitInfo != nil {
 				Task {
 					try? await storeInCloudKit(newValue, forKey: key)
 				}
