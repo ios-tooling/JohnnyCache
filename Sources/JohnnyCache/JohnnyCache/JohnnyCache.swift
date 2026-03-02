@@ -57,17 +57,23 @@ import OSLog
 			return nil
 		}
 		
-		set {
-			storeInMemory(newValue, forKey: key, cachedAt: Date())
-			storeOnDisk(newValue, forKey: key)
-
-			// Store to CloudKit if configured (in background)
-			if #available(macOS 15.0, iOS 16.0, watchOS 10.0, *), configuration.cloudKitInfo != nil {
-				Task {
-					try? await storeInCloudKit(newValue, forKey: key)
-				}
+		set { set(newValue, forKey: key) }
+	}
+	
+	public func set(_ newValue: Element?, forKey key: Key) {
+		storeInMemory(newValue, forKey: key, cachedAt: Date())
+		storeOnDisk(newValue, forKey: key)
+		
+		// Store to CloudKit if configured (in background)
+		if #available(macOS 15.0, iOS 16.0, watchOS 10.0, *), configuration.cloudKitInfo != nil {
+			Task {
+				try? await storeInCloudKit(newValue, forKey: key)
 			}
 		}
+	}
+	
+	public func clearValue(forKey key: Key) {
+		set(nil, forKey: key)
 	}
 	
 	public subscript(async key: Key, maxAge maxAge: TimeInterval? = nil, newerThan newerThan: Date? = nil) -> Element? {
