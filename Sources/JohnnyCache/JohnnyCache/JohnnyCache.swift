@@ -19,6 +19,9 @@ import OSLog
 	// Tracks in-flight fetch operations to prevent duplicate requests for the same key
 	internal var inFlightFetches: [Key: Task<Element?, Error>] = [:]
 
+	// Per-key observer callbacks, keyed by a UUID for removal
+	var observers: [Key: [UUID: (Element?) -> Void]] = [:]
+
 	private let logger = Logger(subsystem: "com.standalone.JohnnyCache", category: "cache")
 
 	public typealias FetchElement = (Key) async throws -> Element?
@@ -62,7 +65,7 @@ import OSLog
 			storeOnDisk(newValue, forKey: key)
 
 			// Store to CloudKit if configured (in background)
-			if #available(iOS 16.0, *), configuration.cloudKitInfo != nil {
+			if #available(iOS 16.0, macOS 15, watchOS 10, *), configuration.cloudKitInfo != nil {
 				Task {
 					try? await storeInCloudKit(newValue, forKey: key)
 				}
@@ -139,6 +142,24 @@ import OSLog
 		}
 	}
 	
+	public func addObserver(for key: Key, id: UUID, handler: @escaping (Element?) -> Void) {
+		observers[key, default: [:]][id] = handler
+	}
+
+	public func removeObserver(for key: Key, id: UUID) {
+		observers[key]?[id] = nil
+		if observers[key]?.isEmpty == true {
+			observers.removeValue(forKey: key)
+		}
+	}
+
+	func notifyObservers(for key: Key, element: Element?) {
+		guard let keyObservers = observers[key] else { return }
+		for handler in keyObservers.values {
+			handler(element)
+		}
+	}
+
 	func onDiskURL(for key: Key) -> URL? {
 		guard let location = configuration.location else { return nil }
 		let path = key.stringRepresentation.replacingOccurrences(of: "/", with: "-").replacingOccurrences(of: ":", with: ";")

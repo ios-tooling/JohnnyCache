@@ -20,6 +20,7 @@ extension JohnnyCache {
 			inMemoryCost -= existing.element.cacheCost
 			cache.removeValue(forKey: key)
 		}
+		notifyObservers(for: key, element: element)
 	}
 	
 	func storeOnDisk(_ element: Element?, forKey key: Key) {
