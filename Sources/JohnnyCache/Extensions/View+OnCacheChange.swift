@@ -11,14 +11,19 @@ private struct OnCacheChangeModifier<Key: CacheableKey, Element: CacheableElemen
 	let cache: JohnnyCache<Key, Element>
 	let key: Key
 	let action: (Element?) -> Void
+	var initialValue: (() async -> Element?)?
 
 	@State private var observerID = UUID()
 
 	func body(content: Content) -> some View {
 		content
 			.task {
-				let current = cache[key]
-				action(current)
+				if let current = cache[key] {
+					action(current)
+				} else if let initial = await initialValue?() {
+					cache[key] = initial
+					action(initial)
+				}
 				cache.addObserver(for: key, id: observerID, handler: action)
 			}
 			.onDisappear {
@@ -33,6 +38,24 @@ public extension View {
 		for key: Key,
 		perform action: @escaping (Element?) -> Void
 	) -> some View {
-		modifier(OnCacheChangeModifier(cache: cache, key: key, action: action))
+		modifier(OnCacheChangeModifier(cache: cache, key: key, action: action, initialValue: nil))
+	}
+	
+	func onCacheChange<Key: CacheableKey, Element: CacheableElement>(
+		in cache: JohnnyCache<Key, Element>,
+		for key: Key,
+		initial: @autoclosure @escaping () -> Element?,
+		perform action: @escaping (Element?) -> Void
+	) -> some View {
+		modifier(OnCacheChangeModifier(cache: cache, key: key, action: action, initialValue: initial))
+	}
+	
+	func onCacheChange<Key: CacheableKey, Element: CacheableElement>(
+		in cache: JohnnyCache<Key, Element>,
+		for key: Key,
+		initial: @escaping () async -> Element?,
+		perform action: @escaping (Element?) -> Void
+	) -> some View {
+		modifier(OnCacheChangeModifier(cache: cache, key: key, action: action, initialValue: initial))
 	}
 }
