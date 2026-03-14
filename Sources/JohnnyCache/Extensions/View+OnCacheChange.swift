@@ -24,6 +24,7 @@ private struct OnCacheChangeModifier<Key: CacheableKey, Element: CacheableElemen
 					cache[key] = initial
 					action(initial)
 				}
+				guard !Task.isCancelled else { return }
 				cache.addObserver(for: key, id: observerID, handler: action)
 			}
 			.onDisappear {

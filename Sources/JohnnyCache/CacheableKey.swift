@@ -17,7 +17,7 @@ extension String: CacheableKey {
 
 extension URL: CacheableKey {
 	public var stringRepresentation: String {
-		if #available(iOS 16.0, *) {
+		if #available(iOS 16.0, tvOS 16.0, visionOS 1.0, *) {
 			(host(percentEncoded: false) ?? "") + "/" + path
 		} else {
 			(host ?? "") + "/" + path

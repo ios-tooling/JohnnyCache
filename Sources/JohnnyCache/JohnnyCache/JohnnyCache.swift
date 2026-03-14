@@ -68,13 +68,13 @@ import OSLog
 		storeOnDisk(newValue, forKey: key)
 		
 		// Store to CloudKit if configured (in background)
-		if #available(macOS 15.0, iOS 16.0, watchOS 10.0, *), configuration.cloudKitInfo != nil {
+		if #available(macOS 15.0, iOS 16.0, watchOS 10.0, tvOS 16.0, visionOS 1.0, *), configuration.cloudKitInfo != nil {
 			Task {
 				try? await storeInCloudKit(newValue, forKey: key)
 			}
 		}
 	}
-	
+
 	public func clearValue(forKey key: Key) {
 		set(nil, forKey: key)
 	}
@@ -108,7 +108,7 @@ import OSLog
 						storeOnDisk(newValue, forKey: key)
 
 						// Store to CloudKit if configured (in background to avoid blocking)
-						if #available(iOS 16.0, macOS 15, watchOS 10, *), configuration.cloudKitInfo != nil {
+						if #available(iOS 16.0, macOS 15, watchOS 10, tvOS 16.0, visionOS 1.0, *), configuration.cloudKitInfo != nil {
 							Task {
 								try? await storeInCloudKit(newValue, forKey: key)
 							}
@@ -143,7 +143,7 @@ import OSLog
 	public func clearAllCaches(inMemory: Bool = true, onDisk: Bool = true, cloudKit: Bool = false) async throws {
 		if inMemory { clearInMemory() }
 		if onDisk { clearOnDisk() }
-		if #available(iOS 16.0, macOS 15, watchOS 10, *), cloudKit {
+		if #available(iOS 16.0, macOS 15, watchOS 10, tvOS 16.0, visionOS 1.0, *), cloudKit {
 			try await clearCloudKit()
 		}
 	}

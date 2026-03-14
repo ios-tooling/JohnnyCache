@@ -48,7 +48,7 @@ extension JohnnyCache {
 
 extension URL {
 	public static func cacheDirectory(named name: String) -> URL {
-		if #available(iOS 16.0, *) {
+		if #available(iOS 16.0, tvOS 16.0, visionOS 1.0, *) {
 			URL.cachesDirectory.appendingPathComponent(name)
 		} else {
 			FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first!

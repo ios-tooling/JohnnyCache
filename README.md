@@ -1,699 +1,303 @@
 # JohnnyCache
 
-A modern, type-safe caching framework for Apple platforms with automatic memory management, LRU eviction, CloudKit sync, and cache stampede prevention.
-
-## Features
-
-- **Three-Tier Caching**: Automatic in-memory, on-disk, and CloudKit storage
-- **CloudKit Sync**: Optional cloud-based caching synced across all your devices
-- **Smart Asset Storage**: Automatically uses CKAsset for large data (configurable threshold)
-- **True LRU Eviction**: Tracks access times for accurate least-recently-used eviction
-- **Cache Expiration**: Optional `maxAge` and `newerThan` parameters for freshness control
-- **Cache Stampede Prevention**: Deduplicates concurrent requests for the same key
-- **Type-Safe**: Generic design works with any `Hashable` key and cacheable element
-- **Automatic Size Management**: Configurable memory and disk limits with automatic purging
-- **Async/Await Support**: Modern Swift concurrency with `@MainActor` safety
-- **Protocol-Oriented**: Extend with custom key and element types
-- **Built-in Types**: Works out-of-the-box with `Data`, `UIImage`/`NSImage`, any `Codable` type, plus `String` and `URL` keys
-- **Production-Ready**: Comprehensive test coverage with Swift Testing
+A type-safe, three-tier caching framework for Apple platforms (macOS 14+, iOS 16+, watchOS 10+) with in-memory, on-disk, and optional CloudKit storage.
 
 ## Requirements
 
-- macOS 14.0+ / iOS 16.0+ / watchOS 10.0+
-- Swift 6.0+
-- Xcode 16.0+
+- macOS 14.0+ / iOS 14.0+ / tvOS 16.0+ / watchOS 10.0+ / visionOS 1.0+
+- Swift 6.0+ / Xcode 16.0+
 
 ## Installation
 
-### Swift Package Manager
-
-Add JohnnyCache to your `Package.swift`:
-
 ```swift
+// Package.swift
 dependencies: [
     .package(url: "https://github.com/ios-tooling/JohnnyCache.git", from: "1.0.0")
 ]
 ```
 
-Or in Xcode:
-1. File > Add Package Dependencies
-2. Enter the repository URL
-3. Select your version requirements
+---
 
-## Quick Start
+## Core API
 
-### Basic Usage
+`JohnnyCache<Key: CacheableKey, Element: CacheableElement>` is `@MainActor`.
+
+### Reading and Writing
 
 ```swift
-import JohnnyCache
+// Synchronous — checks memory then disk, never network
+cache["key"]                              // Element?
+cache["key", maxAge: 60]                  // nil if cached > 60s ago
+cache["key", newerThan: date]             // nil if cached before date
 
-// Create a cache for Data keyed by String
+// Asynchronous — checks memory → disk → CloudKit → fetch closure
+try await cache[async: "key"]
+try await cache[async: "key", maxAge: 300]
+
+// Writing
+cache["key"] = value                      // sets all tiers
+cache["key"] = nil                        // removes from all tiers
+cache.set(value, forKey: "key")           // equivalent to subscript set
+cache.clearValue(forKey: "key")           // equivalent to cache["key"] = nil
+```
+
+### Cache Clearing
+
+```swift
+cache.clearAll()                          // clears memory + disk (sync)
+cache.clearAll(inMemory: true, onDisk: false)
+
+try await cache.clearAllCaches()                              // memory + disk
+try await cache.clearAllCaches(cloudKit: true)                // + CloudKit (all devices!)
+try await cache.clearAllCaches(inMemory: false, onDisk: false, cloudKit: true)
+```
+
+### Observing Changes
+
+```swift
+// Register a handler called whenever a key's value changes
+let id = UUID()
+cache.addObserver(for: "key", id: id) { element in
+    // called on @MainActor whenever cache["key"] is written
+}
+cache.removeObserver(for: "key", id: id)
+```
+
+### SwiftUI Integration
+
+```swift
+// Observe a cache key and react to changes in a View
+.onCacheChange(in: cache, for: "key") { value in
+    self.value = value
+}
+
+// With a synchronous fallback initial value
+.onCacheChange(in: cache, for: "key", initial: defaultValue) { value in
+    self.value = value
+}
+
+// With an async fallback initial value
+.onCacheChange(in: cache, for: "key", initial: { await fetchDefault() }) { value in
+    self.value = value
+}
+```
+
+The modifier fires `action` immediately with the current cached value (if any), then calls `action` on every subsequent write to that key. If no cached value exists and an `initial` closure is provided, it is awaited and the result is stored before calling `action`.
+
+---
+
+## Initialization
+
+```swift
+// Minimal — uses default config (disk cache in Caches directory)
 let cache = JohnnyCache<String, Data>()
 
-// Store data
-cache["user_profile"] = profileData
-
-// Retrieve data (checks memory, then disk)
-if let data = cache["user_profile"] {
-    print("Found cached data!")
-}
-
-// Remove data
-cache["user_profile"] = nil
-```
-
-### Image Caching
-
-```swift
-import JohnnyCache
-import UIKit
-
-// Create an image cache with URL keys
-let imageCache = JohnnyCache<URL, UIImage>()
-
-let imageURL = URL(string: "https://example.com/avatar.jpg")!
-
-// Store image
-imageCache[imageURL] = downloadedImage
-
-// Retrieve image
-if let cachedImage = imageCache[imageURL] {
-    imageView.image = cachedImage
-}
-```
-
-### Caching Codable Types
-
-Any `Codable` type automatically conforms to `CacheableElement` - no extra code needed:
-
-```swift
-struct UserProfile: Codable, Sendable {
-    let id: Int
-    let name: String
-    let email: String
-    let createdAt: Date  // Dates use ISO8601 encoding
-}
-
-// Just use it directly - Codable conformance is automatic!
-let cache = JohnnyCache<String, UserProfile>()
-
-cache["user_123"] = UserProfile(id: 123, name: "Alice", email: "alice@example.com", createdAt: Date())
-
-if let user = cache["user_123"] {
-    print("Hello, \(user.name)!")
-}
-```
-
-### CloudKit-Backed Image Cache
-
-Enable CloudKit to sync images across all your devices:
-
-```swift
-import CloudKit
-import JohnnyCache
-
-// Configure CloudKit
-let container = CKContainer(identifier: "iCloud.com.example.myapp")
-let cloudKitInfo = JohnnyCache<URL, UIImage>.Configuration.CloudKitInfo(
-    container: container,
-    recordName: "CachedImage"
-)
-
-var config = JohnnyCache<URL, UIImage>.Configuration(name: "Images")
-config.cloudKitInfo = cloudKitInfo
-
-let imageCache = JohnnyCache<URL, UIImage>(configuration: config) { url in
+// With fetch closure — called on cache miss
+let cache = JohnnyCache<URL, UIImage> { url in
     let (data, _) = try await URLSession.shared.data(from: url)
     return UIImage(data: data)
 }
 
-// First device: downloads and caches to CloudKit
-let image1 = try await imageCache[async: imageURL]
-
-// Second device: loads from CloudKit (no download!)
-let image2 = try await imageCache[async: imageURL]
+// With custom configuration
+let config = JohnnyCache<URL, UIImage>.Configuration(
+    name: "Images",
+    inMemory: 100 * 1024 * 1024,   // 100 MB
+    onDisk:   500 * 1024 * 1024    // 500 MB
+)
+let cache = JohnnyCache<URL, UIImage>(configuration: config) { url in ... }
 ```
 
-### Shared Image Cache
-
-JohnnyCache provides a pre-configured global image cache:
+### Shared Global Cache
 
 ```swift
-// iOS/watchOS
-let image = try await sharedImagesCache[async: imageURL]  // JohnnyCache<URL, UIImage>
-
-// macOS
-let image = try await sharedImagesCache[async: imageURL]  // JohnnyCache<URL, NSImage>
+// Pre-configured URL → UIImage/NSImage cache
+let image = try await sharedImagesCache[async: imageURL]
 ```
 
-### Async Fetching with Automatic Caching
+---
 
-```swift
-// Create cache with fetch closure
-let cache = JohnnyCache<URL, Data> { url in
-    // This closure is only called on cache miss
-    let (data, _) = try await URLSession.shared.data(from: url)
-    return data
-}
+## CloudKit
 
-// First call fetches from network and caches
-let data1 = try await cache[async: imageURL]
-
-// Second call returns cached data instantly
-let data2 = try await cache[async: imageURL]
-
-// Concurrent calls are deduplicated (stampede prevention)
-await withTaskGroup(of: Data?.self) { group in
-    for _ in 0..<10 {
-        group.addTask { try? await cache[async: imageURL] }
-    }
-    // Only ONE network request is made!
-}
-```
-
-### Cache Expiration
-
-Control cache freshness with `maxAge` and `newerThan` parameters:
-
-```swift
-let cache = JohnnyCache<String, Data>()
-
-// Only return if cached within the last 60 seconds
-if let fresh = cache["key", maxAge: 60] {
-    print("Fresh data!")
-}
-
-// Only return if cached after a specific date
-let cutoff = Date().addingTimeInterval(-3600)  // 1 hour ago
-if let recent = cache["key", newerThan: cutoff] {
-    print("Recent data!")
-}
-
-// Combine both constraints
-if let valid = cache["key", maxAge: 300, newerThan: lastKnownUpdate] {
-    print("Valid data!")
-}
-```
-
-With async fetching, expired items trigger a re-fetch:
-
-```swift
-let cache = JohnnyCache<URL, Data> { url in
-    let (data, _) = try await URLSession.shared.data(from: url)
-    return data
-}
-
-// Re-fetches if cached data is older than 5 minutes
-let data = try await cache[async: apiURL, maxAge: 300]
-```
-
-## CloudKit Integration
-
-Enable CloudKit caching to sync data across all your devices:
+CloudKit support is opt-in via `Configuration.CloudKitInfo`.
 
 ### Setup
 
-1. **Enable iCloud Capability** in your Xcode project
-   - Select your target → Signing & Capabilities
-   - Add "iCloud" capability
-   - Check "CloudKit"
-   - Add or select a CloudKit container
-
-2. **Configure Cache with CloudKit**
+1. Enable the iCloud capability with CloudKit in your Xcode target.
+2. Configure the cache:
 
 ```swift
 import CloudKit
-import JohnnyCache
 
-// Configure CloudKit
-let container = CKContainer(identifier: "iCloud.com.yourcompany.yourapp")
 let cloudKitInfo = JohnnyCache<URL, Data>.Configuration.CloudKitInfo(
-    container: container,
-    recordName: "CachedImage",    // CKRecord type name
-    assetLimit: 50_000             // 50KB - larger data uses CKAsset
+    container: CKContainer(identifier: "iCloud.com.example.myapp"),
+    recordName: "CachedData",   // CKRecord type name
+    assetLimit: 50_000          // bytes; larger data uses CKAsset (default: 50KB)
 )
 
-// Create cache with CloudKit enabled
-var config = JohnnyCache<URL, Data>.Configuration(
-    name: "ImageCache",
-    inMemory: 50 * 1024 * 1024,    // 50 MB
-    onDisk: 200 * 1024 * 1024      // 200 MB
-)
+var config = JohnnyCache<URL, Data>.Configuration(name: "DataCache")
 config.cloudKitInfo = cloudKitInfo
 
 let cache = JohnnyCache<URL, Data>(configuration: config) { url in
-    // Fetch from network on cache miss
     let (data, _) = try await URLSession.shared.data(from: url)
     return data
 }
 ```
 
-### How It Works
+### Behavior
 
-With CloudKit enabled, the async subscript checks all three tiers:
+- `try await cache[async: key]` checks memory → disk → CloudKit → fetch closure.
+- CloudKit writes happen in a background `Task` so they don't block the return.
+- Small data (<`assetLimit`): stored in CKRecord `data` field.
+- Large data (≥`assetLimit`): stored as `CKAsset` in `data_asset` field.
+- CloudKit is silently skipped when the user is not signed into iCloud.
+- Record ID format: `"{recordName}:{key.stringRepresentation}"`.
 
-```swift
-// Checks: Memory → Disk → CloudKit → Network
-let data = try await cache[async: imageURL]
-```
+> **Warning:** `clearAllCaches(cloudKit: true)` deletes all records of the configured `recordName` from CloudKit's public database — this affects all devices.
 
-**Cache Flow:**
-1. Check in-memory cache (instant)
-2. Check on-disk cache (very fast)
-3. **Check CloudKit** (fast, synced across devices)
-4. Call fetch closure (slow, network-dependent)
-5. Store result in all three tiers
+---
 
-**Storage Strategy:**
-- **Small data** (<50KB by default): Stored in CKRecord's `data` field
-- **Large data** (≥50KB by default): Stored as `CKAsset` for efficiency
-- CloudKit operations happen in background to avoid blocking UI
+## Supported Types
 
-### Clearing CloudKit Cache
+### Built-in Key Types
 
-```swift
-// Clear local caches only (old method, still works)
-cache.clearAll(inMemory: true, onDisk: true)
+| Type | Notes |
+|------|-------|
+| `String` | Direct use |
+| `URL` | Used for `sharedImagesCache` |
 
-// Clear CloudKit cache only
-try await cache.clearAllCaches(inMemory: false, onDisk: false, cloudKit: true)
+### Built-in Element Types
 
-// Clear everything including CloudKit
-try await cache.clearAllCaches(inMemory: true, onDisk: true, cloudKit: true)
-```
+| Type | Platform |
+|------|----------|
+| `Data` | All |
+| `UIImage` | iOS / watchOS |
+| `NSImage` | macOS |
+| Any `Codable` | All — automatic conformance |
 
-⚠️ **Important**: Clearing CloudKit cache affects **all devices** signed into your iCloud account!
-
-### CloudKit Dashboard
-
-You can view cached records in the [CloudKit Dashboard](https://icloud.developer.apple.com/dashboard):
-
-1. Select your container
-2. Go to Public Data → Records
-3. Filter by your `recordName` (e.g., "CachedImage")
-4. Inspect records to see:
-   - `data` field for small items
-   - `data_asset` field with CKAsset for large items
-
-### Requirements
-
-- iCloud account (user must be signed in)
-- CloudKit entitlements in your app
-- Network connection for CloudKit operations
-- Uses public CloudKit database by default
-
-## Configuration
-
-### Custom Cache Configuration
-
-```swift
-let config = JohnnyCache<String, Data>.Configuration(
-    location: URL.cachesDirectory.appendingPathComponent("MyCache"),
-    inMemory: 50 * 1024 * 1024,    // 50 MB in-memory limit
-    onDisk: 500 * 1024 * 1024       // 500 MB on-disk limit
-)
-
-let cache = JohnnyCache<String, Data>(configuration: config)
-```
-
-### Memory-Only Cache
-
-```swift
-let config = JohnnyCache<String, Data>.Configuration(
-    location: nil  // No disk storage
-)
-
-let memoryCache = JohnnyCache<String, Data>(configuration: config)
-```
-
-### Error Handling
-
-```swift
-let cache = JohnnyCache<String, Data>()
-
-// Custom error handler
-cache.errorHandler = { error, context in
-    print("Cache error: \(context) - \(error)")
-    // Send to analytics, crash reporting, etc.
-}
-```
-
-## Advanced Usage
-
-### Custom Cacheable Types
-
-For non-Codable types or when you need custom serialization, conform to `CacheableElement`:
-
-```swift
-struct UserProfile: CacheableElement, Sendable {
-    let name: String
-    let avatar: URL
-
-    // Serialize to Data
-    func toData() throws -> Data {
-        try JSONEncoder().encode(self)
-    }
-
-    // Deserialize from Data
-    static func from(data: Data) throws -> Self {
-        try JSONDecoder().decode(Self.self, from: data)
-    }
-
-    // Memory cost in bytes (be accurate for proper LRU eviction)
-    var cacheCost: UInt64 {
-        UInt64(name.utf8.count + avatar.absoluteString.utf8.count)
-    }
-
-    // File type for disk storage
-    static var uttype: UTType { .json }
-}
-
-// Use it
-let cache = JohnnyCache<String, UserProfile>()
-cache["user_123"] = UserProfile(name: "Alice", avatar: avatarURL)
-```
-
-> **Note**: `Codable` types get automatic `CacheableElement` conformance. Only implement this protocol manually when you need custom serialization or more accurate cost calculation.
-
-### Custom Key Types
-
-Conform to `CacheableKey` for custom key types:
+### Custom Key Type
 
 ```swift
 struct CacheKey: Hashable, Sendable, CacheableKey {
     let userId: String
     let category: String
-
-    var stringRepresentation: String {
-        "\(userId)_\(category)"
-    }
+    var stringRepresentation: String { "\(userId)_\(category)" }
 }
-
-let cache = JohnnyCache<CacheKey, Data>()
-cache[CacheKey(userId: "123", category: "photos")] = photoData
 ```
 
-### Manual Cache Management
+### Custom Element Type
 
 ```swift
-let cache = JohnnyCache<String, Data>()
+struct MyModel: CacheableElement, Sendable {
+    // Serialization
+    func toData() throws -> Data { try JSONEncoder().encode(self) }
+    static func from(data: Data) throws -> Self { try JSONDecoder().decode(Self.self, from: data) }
 
-// Clear only in-memory cache
-cache.clearAll(inMemory: true, onDisk: false)
+    // Memory cost in bytes (used for LRU eviction)
+    var cacheCost: UInt64 { UInt64(MemoryLayout<Self>.size) }
 
-// Clear only disk cache
-cache.clearAll(inMemory: false, onDisk: true)
-
-// Clear local caches (backward compatible)
-cache.clearAll()
-
-// Clear with CloudKit (async)
-try await cache.clearAllCaches(inMemory: true, onDisk: true, cloudKit: false)
-
-// Clear CloudKit only (affects all devices!)
-try await cache.clearAllCaches(inMemory: false, onDisk: false, cloudKit: true)
-
-// Clear everything including CloudKit (nuclear option)
-try await cache.clearAllCaches(inMemory: true, onDisk: true, cloudKit: true)
-
-// Manual purging
-cache.purgeInMemory(downTo: 10 * 1024 * 1024)  // Purge down to 10MB
+    // File extension for on-disk storage
+    static var uttype: UTType { .json }
+}
 ```
 
-## How It Works
+> `Codable` types get automatic `CacheableElement` conformance. Only implement the protocol manually for custom serialization or accurate cost accounting.
 
-### Three-Tier Architecture
+---
 
-1. **In-Memory Cache**: Fast dictionary-based storage with LRU eviction
-   - Items are stored with access timestamps
-   - When memory limit is exceeded, purges to 75% of limit
-   - Evicts least-recently-accessed items first
+## How Caching Works
 
-2. **On-Disk Cache**: Persistent file-based storage
-   - Files named using sanitized key representations
-   - Modification dates updated on access for LRU tracking
-   - Automatic purging when disk limit is exceeded
+### Lookup Order
 
-3. **CloudKit Cache** (optional): Cloud-based storage synced across devices
-   - Configured via `CloudKitInfo` with container and record type
-   - Smart storage: small data in records, large data as CKAssets
-   - Background sync operations to avoid blocking UI
-   - Requires iCloud account and entitlements
+**Synchronous** (`cache[key]`):
+```
+Memory → Disk → nil
+```
+
+**Asynchronous** (`try await cache[async: key]`):
+```
+Memory → Disk → CloudKit (if configured) → fetch closure (if provided) → nil
+```
+
+On a fetch closure hit, the result is stored in all applicable tiers before returning. CloudKit writes are fire-and-forget (background `Task`).
 
 ### Cache Stampede Prevention
 
-When multiple concurrent requests are made for the same uncached key:
+When multiple concurrent async lookups request the same uncached key simultaneously, only one fetch runs. All callers await the same `Task<Element?, Error>` stored in `inFlightFetches`.
+
+### Size Management
+
+- Limits are enforced **after** adding items.
+- When a limit is exceeded, the cache purges to 75% of the limit.
+- In-memory eviction uses `accessedAt` (LRU).
+- On-disk eviction uses file modification dates.
+- `cachedAt` tracks when an item was first cached (used for `maxAge`/`newerThan`), separate from `accessedAt`.
+
+### Thread Safety
+
+All operations are `@MainActor`. CloudKit and fetch closures are awaited within a `Task { @MainActor in ... }`.
+
+---
+
+## Error Handling
 
 ```swift
-// Without stampede prevention (bad):
-Task { await fetch("image.jpg") }  // Makes network request
-Task { await fetch("image.jpg") }  // Makes DUPLICATE request
-Task { await fetch("image.jpg") }  // Makes DUPLICATE request
-
-// With JohnnyCache (good):
-Task { try? await cache[async: "image.jpg"] }  // Makes network request
-Task { try? await cache[async: "image.jpg"] }  // Waits for first request
-Task { try? await cache[async: "image.jpg"] }  // Waits for first request
-// Result: Only ONE network request, all tasks get the same result
-```
-
-### Access Pattern
-
-**Synchronous** (local only):
-```
-cache[key]
-    ↓
-Check in-memory cache
-    ↓ (miss)
-Check disk cache
-    ↓ (hit)
-Load from disk → Store in memory → Return
-    ↓ (miss)
-Return nil
-```
-
-**Asynchronous** (with CloudKit and network):
-```
-try await cache[async: key]
-    ↓
-Check in-memory cache
-    ↓ (miss)
-Check disk cache
-    ↓ (miss)
-Check CloudKit cache (if configured)
-    ↓ (hit)
-Load from CloudKit → Store locally → Return
-    ↓ (miss)
-Check if fetch already in-flight
-    ↓ (yes: wait for it)
-    ↓ (no: start new fetch)
-Call fetch closure → Store in all tiers → Return
-    ↓ (error)
-Clean up in-flight state → Throw (allows retry)
-```
-
-**Note**: CloudKit storage happens in a background Task to avoid blocking the return.
-
-## Best Practices
-
-### 1. Choose Appropriate Limits
-
-```swift
-// For image caches
-let imageConfig = JohnnyCache<URL, UIImage>.Configuration(
-    inMemory: 100 * 1024 * 1024,    // 100 MB - images are expensive
-    onDisk: 1024 * 1024 * 1024       // 1 GB - plenty of room
-)
-
-// For small data caches
-let dataConfig = JohnnyCache<String, Data>.Configuration(
-    inMemory: 10 * 1024 * 1024,     // 10 MB - data is compact
-    onDisk: 50 * 1024 * 1024         // 50 MB - moderate storage
-)
-```
-
-### 2. Implement Accurate Cost Calculation
-
-```swift
-extension MyCustomType: CacheableElement {
-    var cacheCost: UInt64 {
-        // Be accurate! This affects eviction
-        var cost: UInt64 = 0
-        cost += UInt64(MemoryLayout<Self>.size)
-        cost += UInt64(stringProperty.utf8.count)
-        cost += UInt64(arrayProperty.count * MemoryLayout<Element>.size)
-        return cost
-    }
+// Default: errors are logged via OSLog
+// Custom: override the error handler
+cache.errorHandler = { error, context in
+    MyAnalytics.report(error, context: context)
 }
 ```
 
-### 3. Use Appropriate Keys
+Disk read/write errors do not throw — they log and return nil. The async subscript throws on fetch closure errors.
 
-```swift
-// Good: Specific, meaningful keys
-cache["user_\(userId)_profile"]
-cache[URL(string: "https://api.example.com/data")!]
-
-// Bad: Generic keys that might collide
-cache["data"]
-cache["temp"]
-```
-
-### 4. Handle Errors Gracefully
-
-```swift
-let cache = JohnnyCache<URL, Data> { url in
-    do {
-        let (data, response) = try await URLSession.shared.data(from: url)
-        guard let httpResponse = response as? HTTPURLResponse,
-              (200...299).contains(httpResponse.statusCode) else {
-            throw URLError(.badServerResponse)
-        }
-        return data
-    } catch {
-        // Log error, return nil, or re-throw
-        logger.error("Failed to fetch \(url): \(error)")
-        throw error
-    }
-}
-```
-
-### 5. Configure CloudKit Appropriately
-
-```swift
-// Adjust asset limit based on your data
-let cloudKitInfo = JohnnyCache<URL, Data>.Configuration.CloudKitInfo(
-    container: container,
-    recordName: "CachedData",
-    assetLimit: 100_000  // 100KB - tune based on typical data size
-)
-
-// Small data (API responses): lower threshold
-// Large data (images, videos): higher threshold
-// CloudKit has a 1MB limit for the entire record, including all fields
-```
-
-**CloudKit Best Practices:**
-- Use descriptive record names that won't conflict
-- Set appropriate asset thresholds (default 50KB is good for most cases)
-- Remember CloudKit clearing affects all devices
-- Test with iCloud account signed in
-- Handle offline scenarios gracefully (CloudKit operations will fail without network)
+---
 
 ## Testing
 
-JohnnyCache includes comprehensive test coverage using Swift Testing:
-
 ```bash
-# Run all tests
 swift test
-
-# Run specific test suite
-swift test --filter JohnnyCacheCloudKitTests
-
-# Run single test
+swift test --filter JohnnyCacheBasicTests
 swift test --filter JohnnyCacheBasicTests/testBasicSetGet
 ```
 
-Test suites cover:
-- Basic cache operations (CRUD, persistence)
-- Cache age and expiration (maxAge, newerThan)
-- **CloudKit integration** (configuration, clearing, storage logic)
-- Codable type caching (serialization, dates, nested types)
-- Cost accounting accuracy
-- LRU eviction behavior
-- Cache stampede prevention
-- Concurrent access patterns
-- Error handling
+72 tests across: basic CRUD, expiration, CloudKit logic, Codable serialization, cost accounting, LRU eviction, stampede prevention, concurrency.
 
-**72 tests** total, including 16 CloudKit-specific tests that verify logic without requiring actual CloudKit connectivity.
-
-## Performance Characteristics
-
-| Operation | In-Memory | On-Disk |
-|-----------|-----------|---------|
-| Read (hit) | O(1) | O(1) + file I/O |
-| Write | O(1) | O(1) + file I/O |
-| Eviction | O(n log n)* | O(n log n)* |
-
-*Where n is the number of cached items. Eviction sorts by access time.
-
-**Note**: Disk I/O is synchronous and runs on the main thread. Keep cached items reasonably sized to avoid UI jank.
+---
 
 ## Architecture
 
 ```
-JohnnyCache/
+Sources/JohnnyCache/
 ├── JohnnyCache/
-│   ├── JohnnyCache.swift                  # Core cache class
-│   ├── JohnnyCache+RetrieveValue.swift    # Get operations (memory, disk, CloudKit)
-│   ├── JohnnyCache+StoreValues.swift      # Set/remove operations (all tiers)
-│   ├── JohnnyCache+CloudKit.swift         # CloudKit sign-in detection
-│   ├── JohnnyCache+CacheLimits.swift      # Eviction & purging
+│   ├── JohnnyCache.swift                  # Core class: subscripts, set/clear, observers
+│   ├── JohnnyCache+RetrieveValue.swift    # Memory, disk, CloudKit reads
+│   ├── JohnnyCache+StoreValues.swift      # Memory, disk, CloudKit writes; observer notification
+│   ├── JohnnyCache+CacheLimits.swift      # Size enforcement and LRU eviction
+│   ├── JohnnyCache+CloudKit.swift         # iCloud sign-in detection
 │   ├── JohnnyCache.Configuration.swift    # Configuration + CloudKitInfo
-│   └── CachedItem.swift                   # Internal item wrapper
-├── CacheableKey.swift                 # Key protocol
-├── CacheableElement.swift             # Element protocol
-├── SharedCaches.swift                 # Pre-configured sharedImagesCache
+│   └── CachedItem.swift                   # Internal wrapper (element, cachedAt, accessedAt)
+├── CacheableKey.swift                     # Key protocol (Hashable + stringRepresentation)
+├── CacheableElement.swift                 # Element protocol (toData, from, cacheCost, uttype)
+├── SharedCaches.swift                     # sharedImagesCache global
 ├── Extensions/
-│   ├── Codable.swift                  # Automatic CacheableElement for Codable types
-│   └── FileManager.swift              # File utilities
+│   ├── Codable.swift                      # Automatic CacheableElement for Codable
+│   ├── FileManager.swift                  # File enumeration and size utilities
+│   ├── URL.swift                          # URL utilities
+│   └── View+OnCacheChange.swift           # SwiftUI .onCacheChange modifier
 └── Cacheable Elements/
     ├── Data+CacheableElement.swift
-    ├── UIImage+CacheableElement.swift     # iOS/watchOS
+    ├── UIImage+CacheableElement.swift     # iOS / watchOS
     └── NSImage+CacheableElement.swift     # macOS
 ```
 
-## Thread Safety
-
-JohnnyCache is annotated with `@MainActor`, ensuring all operations execute on the main thread. This provides:
-
-- **Data race safety** through Swift's actor isolation
-- **Predictable behavior** for UI-related caching (images, etc.)
-- **Simple concurrency model** without manual synchronization
-
-If you need background caching, wrap calls in `Task { @MainActor in ... }`:
-
-```swift
-Task.detached {
-    await MainActor.run {
-        cache[key] = value
-    }
-}
-```
+---
 
 ## Demo App
 
-A complete SwiftUI demo app is included in `Tests/Test Harness/` that showcases CloudKit integration:
+A SwiftUI demo app is in `Tests/Test Harness/JohnnyCacheTest.xcodeproj`. It demonstrates CloudKit integration, cache statistics, and the `@Observable` pattern (iOS 17+).
 
-### Features
-- Image gallery with CloudKit-backed caching
-- Real-time cache statistics (memory, disk, CloudKit)
-- Color-coded indicators showing cache source (memory, disk, network)
-- CloudKit account status checking
-- Cache management UI with CloudKit clearing options
-- Uses modern `@Observable` pattern (iOS 17+)
-
-### Running the Demo
-```bash
-cd "Tests/Test Harness"
-open JohnnyCacheTest.xcodeproj
-```
-
-See `Tests/Test Harness/README.md` for complete setup instructions.
-
-## Contributing
-
-Contributions are welcome! Please:
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes with descriptive messages
-4. Add tests for new functionality
-5. Ensure all tests pass (`Cmd + U` in Xcode)
-6. Push to your branch (`git push origin feature/amazing-feature`)
-7. Open a Pull Request
+---
 
 ## License
 
-JohnnyCache is available under the MIT license. See the [LICENSE](LICENSE) file for more info.
+MIT. See [LICENSE](LICENSE).
