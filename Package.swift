@@ -7,11 +7,11 @@ import CompilerPluginSupport
 let package = Package(
     name: "JohnnyCache",
      platforms: [
-              .macOS(.v15),
-              .iOS(.v16),
-              .watchOS(.v10),
-              .tvOS(.v16),
-              .visionOS(.v1),
+					.macOS(.v14),
+					.iOS(.v14),
+					.watchOS(.v7),
+               .tvOS(.v16),
+               .visionOS(.v1),
          ],
     products: [
         // Products define the executables and libraries produced by a package, and make them visible to other packages.

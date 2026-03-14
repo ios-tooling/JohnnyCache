@@ -7,6 +7,7 @@
 
 import SwiftUI
 
+@available(iOS 15.0, *)
 private struct OnCacheChangeModifier<Key: CacheableKey, Element: CacheableElement>: ViewModifier {
 	let cache: JohnnyCache<Key, Element>
 	let key: Key
@@ -33,6 +34,7 @@ private struct OnCacheChangeModifier<Key: CacheableKey, Element: CacheableElemen
 	}
 }
 
+@available(iOS 15.0, *)
 public extension View {
 	func onCacheChange<Key: CacheableKey, Element: CacheableElement>(
 		in cache: JohnnyCache<Key, Element>,
