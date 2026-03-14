@@ -104,6 +104,36 @@ if let user = cache["user_123"] {
 }
 ```
 
+### CloudKit-Backed Image Cache
+
+Enable CloudKit to sync images across all your devices:
+
+```swift
+import CloudKit
+import JohnnyCache
+
+// Configure CloudKit
+let container = CKContainer(identifier: "iCloud.com.example.myapp")
+let cloudKitInfo = JohnnyCache<URL, UIImage>.Configuration.CloudKitInfo(
+    container: container,
+    recordName: "CachedImage"
+)
+
+var config = JohnnyCache<URL, UIImage>.Configuration(name: "Images")
+config.cloudKitInfo = cloudKitInfo
+
+let imageCache = JohnnyCache<URL, UIImage>(configuration: config) { url in
+    let (data, _) = try await URLSession.shared.data(from: url)
+    return UIImage(data: data)
+}
+
+// First device: downloads and caches to CloudKit
+let image1 = try await imageCache[async: imageURL]
+
+// Second device: loads from CloudKit (no download!)
+let image2 = try await imageCache[async: imageURL]
+```
+
 ### Shared Image Cache
 
 JohnnyCache provides a pre-configured global image cache:
@@ -527,6 +557,28 @@ let cache = JohnnyCache<URL, Data> { url in
     }
 }
 ```
+
+### 5. Configure CloudKit Appropriately
+
+```swift
+// Adjust asset limit based on your data
+let cloudKitInfo = JohnnyCache<URL, Data>.Configuration.CloudKitInfo(
+    container: container,
+    recordName: "CachedData",
+    assetLimit: 100_000  // 100KB - tune based on typical data size
+)
+
+// Small data (API responses): lower threshold
+// Large data (images, videos): higher threshold
+// CloudKit has a 1MB limit for the entire record, including all fields
+```
+
+**CloudKit Best Practices:**
+- Use descriptive record names that won't conflict
+- Set appropriate asset thresholds (default 50KB is good for most cases)
+- Remember CloudKit clearing affects all devices
+- Test with iCloud account signed in
+- Handle offline scenarios gracefully (CloudKit operations will fail without network)
 
 ## Testing
 
