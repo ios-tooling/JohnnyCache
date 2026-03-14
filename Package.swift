@@ -7,8 +7,8 @@ import CompilerPluginSupport
 let package = Package(
     name: "JohnnyCache",
      platforms: [
-              .macOS(.v14),
-              .iOS(.v14),
+              .macOS(.v15),
+              .iOS(.v16),
               .watchOS(.v10),
               .tvOS(.v16),
               .visionOS(.v1),
