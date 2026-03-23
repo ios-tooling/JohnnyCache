@@ -13,12 +13,14 @@ extension JohnnyCache {
 		if let element {
 			inMemoryCost -= cache[key]?.cacheCost ?? 0
 			cache[key] = .init(key: key, element: element, cacheCost: element.cacheCost, cachedAt: cachedAt)
+			changeTokens[key] = UUID().uuidString
 			inMemoryCost += element.cacheCost
 			checkInMemorySize()
 		} else {
 			guard let existing = cache[key] else { return }
 			inMemoryCost -= existing.element.cacheCost
 			cache.removeValue(forKey: key)
+			changeTokens.removeValue(forKey: key)
 		}
 		notifyObservers(for: key, element: element)
 	}

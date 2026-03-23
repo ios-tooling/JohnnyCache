@@ -17,6 +17,7 @@ extension JohnnyCache {
 		
 		item.accessedAt = Date()
 		cache[key] = item
+		changeTokens[key] = UUID().uuidString
 		return item.element
 	}
 	

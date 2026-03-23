@@ -17,8 +17,9 @@ private struct OnCacheChangeModifier<Key: CacheableKey, Element: CacheableElemen
 	@State private var observerID = UUID()
 
 	func body(content: Content) -> some View {
+		let changeToken = cache.changeToken(for: key)
 		content
-			.task {
+			.task(id: changeToken) {
 				if let current = cache[key] {
 					action(current)
 				} else if let initial = await initialValue?() {

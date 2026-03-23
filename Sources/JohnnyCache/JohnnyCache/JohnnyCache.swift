@@ -12,6 +12,7 @@ import OSLog
 	var cache: [Key: CachedItem] = [:]
 	var configuration: Configuration
 	var isSignedInToCloudKit = false
+	var changeTokens: [Key: String] = [:]
 	public var fetchElement: FetchElement?
 	public internal(set) var inMemoryCost: UInt64 = 0
 	public internal(set) var onDiskCost: UInt64 = 0
@@ -77,6 +78,12 @@ import OSLog
 
 	public func clearValue(forKey key: Key) {
 		set(nil, forKey: key)
+		changeTokens[key] = UUID().uuidString
+		notifyObservers(for: key, element: nil)
+	}
+	
+	public func changeToken(for key: Key) -> String? {
+		changeTokens[key]
 	}
 	
 	public subscript(async key: Key, maxAge maxAge: TimeInterval? = nil, newerThan newerThan: Date? = nil) -> Element? {
