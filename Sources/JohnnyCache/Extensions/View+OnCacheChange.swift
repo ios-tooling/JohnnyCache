@@ -19,15 +19,18 @@ private struct OnCacheChangeModifier<Key: CacheableKey, Element: CacheableElemen
 	func body(content: Content) -> some View {
 		let changeToken = cache.changeToken(for: key)
 		content
-			.task(id: changeToken) {
+			.onAppear {
 				if let current = cache[key] {
 					action(current)
-				} else if let initial = await initialValue?() {
+				}
+				cache.addObserver(for: key, id: observerID, handler: action)
+			}
+			.task(id: changeToken) {
+				if let initial = await initialValue?() {
 					cache[key] = initial
 					action(initial)
 				}
 				guard !Task.isCancelled else { return }
-				cache.addObserver(for: key, id: observerID, handler: action)
 			}
 			.onDisappear {
 				cache.removeObserver(for: key, id: observerID)
