@@ -32,6 +32,9 @@ extension NSImage: CacheableElement {
 		let size = size
 		return UInt64(size.width * size.height * 4)
 	}
+	public var cacheCostDescription: String {
+		[ByteCountFormatter().string(for: cacheCost), size.debugDescription].compactMap { $0 }.joined(separator: ", ")
+	}
 }
 
 
