@@ -23,6 +23,9 @@ import OSLog
 	// Per-key observer callbacks, keyed by a UUID for removal
 	var observers: [Key: [UUID: (Element?) -> Void]] = [:]
 
+	// Monitors system memory pressure to proactively purge the in-memory cache
+	var memoryPressureSource: DispatchSourceMemoryPressure?
+
 	private let logger = Logger(subsystem: "com.standalone.JohnnyCache", category: "cache")
 
 	public typealias FetchElement = (Key) async throws -> Element?
@@ -51,7 +54,11 @@ import OSLog
 				onDiskCost = files.reduce(0, { $0 + $1.size })
 			}
 		}
+
+		if config.respondsToMemoryPressure { startMonitoringMemoryPressure() }
 	}
+
+	deinit { memoryPressureSource?.cancel() }
 	
 	public subscript(key: Key, maxAge maxAge: TimeInterval? = nil, newerThan newerThan: Date? = nil) -> Element? {
 		get {

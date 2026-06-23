@@ -28,7 +28,8 @@ extension UIImage: CacheableElement {
 	static public var uttype: UTType { .png }
 	public var cacheCost: UInt64 {
 		let size = size
-		return UInt64(size.width * size.height * 4) * UInt64(scale * scale)
+		let byteMultiplier = 8.0 		// 4 for regular, and 8 for 'wide pixel' displays, ie P3 Color gamut
+		return UInt64(size.width * size.height * byteMultiplier) * UInt64(scale * scale)
 	}
 }
 

@@ -11,15 +11,17 @@ import CloudKit
 extension JohnnyCache {
 	public struct Configuration {
 		var location: URL?
-		var inMemoryLimit: UInt64
-		var onDiskLimit: UInt64
+		var inMemoryLimit: UInt64 = 1024 * 1024 * 200
+		var onDiskLimit: UInt64 = 1024 * 1024 * 1024
+		var respondsToMemoryPressure = true
 		var cloudKitInfo: CloudKitInfo?
-		
+
 		public init(
 			location: URL? = URL.cacheDirectory(named: String(describing: Element.self)),
 			name: String? = nil,
-				inMemory: UInt64 = 1024 * 1024 * 100, 	// 100 MB in memory limit
+				inMemory: UInt64 = 1024 * 1024 * 200, 	// 200 MB in memory limit
 				onDisk: UInt64 = 1024 * 1024 * 1024, 	// 1 GB on disk limit
+				respondsToMemoryPressure: Bool = true,
 				cloudKitInfo: CloudKitInfo? = nil
 		) {
 			if let name {
@@ -29,6 +31,7 @@ extension JohnnyCache {
 			}
 			self.inMemoryLimit = inMemory
 			self.onDiskLimit = onDisk
+			self.respondsToMemoryPressure = respondsToMemoryPressure
 			self.cloudKitInfo = cloudKitInfo
 		}
 		
