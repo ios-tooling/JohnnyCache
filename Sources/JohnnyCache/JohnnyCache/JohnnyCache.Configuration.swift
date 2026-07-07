@@ -15,6 +15,7 @@ extension JohnnyCache {
 		var onDiskLimit: UInt64 = 1024 * 1024 * 1024
 		var respondsToMemoryPressure = true
 		var cloudKitInfo: CloudKitInfo?
+		var signOutPersistent = false
 
 		public init(
 			location: URL? = URL.cacheDirectory(named: String(describing: Element.self)),
@@ -22,7 +23,8 @@ extension JohnnyCache {
 				inMemory: UInt64 = 1024 * 1024 * 200, 	// 200 MB in memory limit
 				onDisk: UInt64 = 1024 * 1024 * 1024, 	// 1 GB on disk limit
 				respondsToMemoryPressure: Bool = true,
-				cloudKitInfo: CloudKitInfo? = nil
+				cloudKitInfo: CloudKitInfo? = nil,
+				signOutPersistent: Bool = false
 		) {
 			if let name {
 				self.location = URL.cacheDirectory(named: name)
@@ -33,6 +35,7 @@ extension JohnnyCache {
 			self.onDiskLimit = onDisk
 			self.respondsToMemoryPressure = respondsToMemoryPressure
 			self.cloudKitInfo = cloudKitInfo
+			self.signOutPersistent = signOutPersistent
 		}
 		
 		public struct CloudKitInfo {

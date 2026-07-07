@@ -37,14 +37,17 @@ import OSLog
 	func report(error: Error, context: String) {
 		if let errorHandler {
 			errorHandler(error, context)
+		} else if let defaultHandler = JohnnyCacheRegistry.defaultErrorHandler {
+			defaultHandler(error, context)
 		} else {
 			logger.error("\(context): \(error.localizedDescription)")
 		}
 	}
-	
+
 	public init(configuration config: Configuration = .init(), fetch: FetchElement? = nil) {
 		configuration = config
 		fetchElement = fetch
+		JohnnyCacheRegistry.register(self)
 		setupCloudKit()
 		
 		if let url = config.location {
