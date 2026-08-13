@@ -13,6 +13,23 @@ import Foundation
 @MainActor
 struct JohnnyCacheCostAccountingTests {
 
+	// two caches over one directory: the second's ledger never saw the first's file,
+	// so overwriting it used to trap with an unsigned-arithmetic overflow
+	@Test("A stale disk ledger clamps to zero instead of trapping")
+	func staleDiskLedgerClamps() async throws {
+		let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+		let unaware = JohnnyCache<String, Data>(configuration: .init(location: tempDir))		// seeds its ledger from an empty directory
+		let writer = JohnnyCache<String, Data>(configuration: .init(location: tempDir))
+
+		writer["key"] = Data(count: 10_000)		// a file `unaware`'s ledger never accounted for
+
+		unaware["key"] = Data(count: 100)		// used to trap: 0 − 10_000 on the UInt64 ledger
+		#expect(unaware.onDiskCost == 100)
+
+		// Clean up
+		try? FileManager.default.removeItem(at: tempDir)
+	}
+
 	@Test("In-memory cost increases when adding items")
 	func inMemoryCostIncreases() async throws {
 		let config = JohnnyCache<String, Data>.Configuration(location: nil)

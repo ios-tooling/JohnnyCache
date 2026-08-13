@@ -33,7 +33,7 @@ extension JohnnyCache {
 		var index = 0
 		
 		while onDiskCost > limit, index < sorted.count {
-			onDiskCost -= sorted[index].size
+			onDiskCost.subtract(clamping: sorted[index].size)
 			try? fm.removeItem(at: sorted[index].url)
 			index += 1
 		}

@@ -11,14 +11,14 @@ import CloudKit
 extension JohnnyCache {
 	func storeInMemory(_ element: Element?, forKey key: Key, cachedAt: Date?) {
 		if let element {
-			inMemoryCost -= cache[key]?.cacheCost ?? 0
+			inMemoryCost.subtract(clamping: cache[key]?.cacheCost ?? 0)
 			cache[key] = .init(key: key, element: element, cacheCost: element.cacheCost, cachedAt: cachedAt)
 			changeTokens[key] = UUID().uuidString
 			inMemoryCost += element.cacheCost
 			checkInMemorySize()
 		} else {
 			guard let existing = cache[key] else { return }
-			inMemoryCost -= existing.element.cacheCost
+			inMemoryCost.subtract(clamping: existing.element.cacheCost)
 			cache.removeValue(forKey: key)
 			changeTokens.removeValue(forKey: key)
 		}
@@ -31,7 +31,7 @@ extension JohnnyCache {
 		if let element {
 			do {
 				if FileManager.default.fileExists(atPath: url.path) {
-					onDiskCost -= url.fileSize
+					onDiskCost.subtract(clamping: url.fileSize)
 					try? FileManager.default.removeItem(at: url)
 				}
 				let data = try element.toData()
@@ -42,7 +42,7 @@ extension JohnnyCache {
 				report(error: error, context: "Failed to extract data for \(key)")
 			}
 		} else {
-			onDiskCost -= url.fileSize
+			onDiskCost.subtract(clamping: url.fileSize)
 			try? FileManager.default.removeItem(at: url)
 		}
 	}
